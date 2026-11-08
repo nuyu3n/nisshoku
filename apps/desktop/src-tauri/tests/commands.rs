@@ -12,6 +12,14 @@ use tauri::test::{
 use tauri::webview::InvokeRequest;
 use tauri::{App, WebviewWindow, WebviewWindowBuilder};
 
+/// The app's own origin, as the window calls from it. Any other origin is
+/// remote, and Tauri refuses remote calls to the app's commands.
+const LOCAL_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) {
+    "http://tauri.localhost"
+} else {
+    "tauri://localhost"
+};
+
 struct TestApp {
     _app: App<MockRuntime>,
     window: WebviewWindow<MockRuntime>,
@@ -43,7 +51,7 @@ impl TestApp {
                 cmd: cmd.into(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
-                url: "http://tauri.localhost".parse().unwrap(),
+                url: LOCAL_ORIGIN.parse().unwrap(),
                 body: InvokeBody::Json(args),
                 headers: Default::default(),
                 invoke_key: INVOKE_KEY.to_string(),
