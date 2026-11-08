@@ -272,7 +272,7 @@ function Row({ folder, tree, depth, shown, query, collapsed, activeId }: LevelPr
           if (!id) return;
           await api.moveNote(id, folder.id).catch(report);
           await useStore.getState().refresh();
-          useStore.getState().reloadNote();
+          useStore.getState().reloadNoteIf(id);
           useStore.getState().toast(t("folder.moved", { name: folder.title }));
         }}
       >

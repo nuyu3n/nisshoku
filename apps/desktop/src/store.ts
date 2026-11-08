@@ -73,6 +73,12 @@ export interface Preferences {
   syncAfterEdit: boolean;
   /** Days after which the trash is emptied; 0 for never. */
   trashRetentionDays: number;
+  /** The notebook new tasks go to (outside a notebook's list); empty for the default one. */
+  taskNotebook: string;
+  /** Notify to-dos when they fall due. */
+  taskReminders: boolean;
+  /** Days the note history is kept; 0 for always. */
+  historyDays: number;
   /** Look for a new version at start (and every few hours). */
   autoUpdateCheck: boolean;
 }
@@ -126,6 +132,9 @@ export const defaultPreferences: Preferences = {
   syncOnStart: true,
   syncAfterEdit: true,
   trashRetentionDays: 30,
+  historyDays: 90,
+  taskReminders: true,
+  taskNotebook: "",
   autoUpdateCheck: true,
 };
 
@@ -137,7 +146,7 @@ export function layoutFor(width: number): Layout {
   return width >= 720 ? "medium" : "narrow";
 }
 
-export type Panel = "none" | "outline" | "history" | "preview" | "comments" | "proof";
+export type Panel = "none" | "outline" | "history" | "preview" | "comments" | "proof" | "reference";
 export type SidebarTab = "notebooks" | "comments";
 
 export interface Toast {
@@ -182,6 +191,8 @@ interface AppStore {
   layout: Layout;
   /** On narrow screens, the screen shown. */
   mobilePane: MobilePane;
+  /** The note shown beside the text in the reference panel. */
+  referenceId: string | null;
   /** An attachment shown in the viewer (PDF). */
   preview: { title: string; url: string; id: string } | null;
 
@@ -194,10 +205,14 @@ interface AppStore {
   loadNotes: () => Promise<void>;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
+  /** Opens a note, showing the list it lives in if the current one does not have it (the trash, conflicts, the diary, its notebook). */
+  openNote: (id: string) => Promise<boolean>;
   newNote: (parentId?: string) => Promise<void>;
   openDiary: (date?: string) => Promise<void>;
   updateSummary: (summary: NoteSummary) => void;
   reloadNote: () => void;
+  /** Reloads the open note if it is `id` (a change to another note must not reload, and so scroll, the one being written). */
+  reloadNoteIf: (id: string) => void;
   set: (patch: Partial<AppStore>) => void;
   setPrefs: (patch: Partial<Preferences>) => void;
   loadPrefs: () => Promise<void>;
@@ -248,6 +263,7 @@ export const useStore = create<AppStore>((set, get) => ({
   layout: layoutFor(window.innerWidth),
   mobilePane: "list",
   preview: null,
+  referenceId: null,
 
   setScope: async (scope) => {
     set({ scope, listOpen: true, mobilePane: "list" });
@@ -281,11 +297,32 @@ export const useStore = create<AppStore>((set, get) => ({
       if (get().prefs.lastNoteId !== id) get().setPrefs({ lastNoteId: id });
     }
   },
+  openNote: async (id) => {
+    if (!get().notes.some((n) => n.id === id)) {
+      const note = await api.getNote(id).catch(() => null);
+      if (!note) return false;
+      const folder = get().folders.find((f) => f.id === note.parentId);
+      const scope: Scope =
+        note.deletedTime > 0 ? { kind: "trash" }
+        : note.isConflict ? { kind: "conflicts" }
+        : folder?.isDiary ? { kind: "diary" }
+        : folder ? { kind: "folder", id: folder.id }
+        : { kind: "all" };
+      await get().setScope(scope);
+    }
+    get().select(id);
+    return true;
+  },
   newNote: async (parentId) => {
     const { scope } = get();
     const target = parentId ?? (scope.kind === "folder" ? scope.id : undefined);
     const note = await api.createNote(target);
-    if (scope.kind !== "all" && !(scope.kind === "folder" && scope.id === note.parentId)) {
+    // Written from a tag's or the pinned list, it belongs there (and the list stays).
+    const tag = scope.kind === "tag" && !parentId ? get().tags.find((x) => x.id === scope.id) : undefined;
+    if (tag) await api.setNoteTags(note.id, [tag.title]).catch(report);
+    const pinned = scope.kind === "pinned" && !parentId;
+    if (pinned) await api.setNotePinned(note.id, true).catch(report);
+    if (scope.kind !== "all" && !tag && !pinned && !(scope.kind === "folder" && scope.id === note.parentId)) {
       set({ scope: { kind: "folder", id: note.parentId } });
     }
     await get().refresh();
@@ -305,6 +342,9 @@ export const useStore = create<AppStore>((set, get) => ({
       notes: s.notes.map((n) => (n.id === summary.id ? { ...n, ...summary } : n)),
     })),
   reloadNote: () => set((s) => ({ noteVersion: s.noteVersion + 1 })),
+  reloadNoteIf: (id) => {
+    if (get().selectedId === id) get().reloadNote();
+  },
   // Opening or closing the sidebar ends a peek at it.
   set: (patch) => set("sidebarOpen" in patch ? { sidebarPeek: false, ...patch } : patch),
   setPrefs: (patch) => {

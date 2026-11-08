@@ -59,6 +59,10 @@ impl Database {
         Self::init(Connection::open_in_memory()?)
     }
 
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     fn init(conn: Connection) -> Result<Self> {
         let db = Self { conn };
         db.migrate()?;
@@ -231,6 +235,21 @@ impl Database {
         self.write(item)
     }
 
+    /// Saves a change of metadata (pin, order, notebook, app data…): synced
+    /// like any change, but the time the user last edited the item
+    /// (`user_updated_time`) stays, so lists sorted by it do not move.
+    pub fn save_meta<M: Model>(&self, item: &mut M) -> Result<()> {
+        if item.id().is_empty() {
+            return self.save(item);
+        }
+        let t = match self.load::<M>(item.id())? {
+            Some(e) => now_ms().max(e.updated_time() + 1),
+            None => return self.save(item),
+        };
+        item.touch_meta(t);
+        self.write(item)
+    }
+
     /// Writes an item as is, without touching its timestamps.
     pub fn write<M: Model>(&self, item: &M) -> Result<()> {
         let mut columns: Vec<String> = M::FIELDS.iter().map(|(n, _)| format!("\"{n}\"")).collect();
@@ -287,10 +306,18 @@ impl Database {
     ///
     /// Resource files are not touched; that is up to the caller.
     pub fn delete(&self, item_type: ItemType, id: &str) -> Result<()> {
+        self.delete_inner(item_type, id, &mut HashSet::new())
+    }
+
+    fn delete_inner(&self, item_type: ItemType, id: &str, seen: &mut HashSet<String>) -> Result<()> {
+        // Folders whose parents form a loop (damaged data) end the recursion.
+        if !seen.insert(id.to_string()) {
+            return Ok(());
+        }
         match item_type {
             ItemType::Folder => {
                 for f in self.query::<Folder, _>("parent_id = ?1", [id])? {
-                    self.delete(ItemType::Folder, &f.id)?;
+                    self.delete_inner(ItemType::Folder, &f.id, seen)?;
                 }
                 for n in self.query::<Note, _>("parent_id = ?1", [id])? {
                     self.delete(ItemType::Note, &n.id)?;
@@ -535,6 +562,19 @@ impl Database {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [key, value],
         )?;
+        Ok(())
+    }
+
+    /// Writes a consistent copy of the database to `path` (which must not
+    /// exist), while it stays in use.
+    pub fn backup_to(&self, path: &Path) -> Result<()> {
+        self.conn
+            .execute("VACUUM INTO ?1", [path.to_string_lossy().as_ref()])?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
         Ok(())
     }
 

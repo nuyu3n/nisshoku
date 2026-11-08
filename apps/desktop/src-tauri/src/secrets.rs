@@ -83,17 +83,61 @@ mod keychain {
         keyring::Entry::new(SERVICE, name).map_err(|e| e.to_string())
     }
 
+    /// Windows keeps at most 2560 bytes (1280 UTF-16 units) per credential,
+    /// less than some refresh tokens (Microsoft's): longer values are split
+    /// over several entries, the first one saying how many.
+    const CHUNK: usize = 1000;
+    const PREFIX: &str = "nisshoku-chunks:";
+
+    fn part(name: &str, i: usize) -> String {
+        format!("{name}#{i}")
+    }
+
     pub fn get(name: &str) -> Option<String> {
-        entry(name).ok()?.get_password().ok()
+        let first = entry(name).ok()?.get_password().ok()?;
+        let Some(n) = first.strip_prefix(PREFIX).and_then(|n| n.parse::<usize>().ok()) else {
+            return Some(first);
+        };
+        let mut out = String::new();
+        for i in 1..=n {
+            out.push_str(&entry(&part(name, i)).ok()?.get_password().ok()?);
+        }
+        Some(out)
     }
 
     pub fn set(name: &str, value: &str) -> Result<(), String> {
+        let failed = |e: keyring::Error| format!("パスワードを保存できませんでした: {e}");
+        remove_parts(name);
+        let chars: Vec<char> = value.chars().collect();
+        if chars.len() <= CHUNK && !value.starts_with(PREFIX) {
+            return entry(name)?.set_password(value).map_err(failed);
+        }
+        let parts: Vec<String> = chars.chunks(CHUNK).map(|c| c.iter().collect()).collect();
+        for (i, p) in parts.iter().enumerate() {
+            entry(&part(name, i + 1))?.set_password(p).map_err(failed)?;
+        }
         entry(name)?
-            .set_password(value)
-            .map_err(|e| format!("パスワードを保存できませんでした: {e}"))
+            .set_password(&format!("{PREFIX}{}", parts.len()))
+            .map_err(failed)
+    }
+
+    fn remove_parts(name: &str) {
+        let Some(n) = entry(name)
+            .ok()
+            .and_then(|e| e.get_password().ok())
+            .and_then(|v| v.strip_prefix(PREFIX).and_then(|n| n.parse::<usize>().ok()))
+        else {
+            return;
+        };
+        for i in 1..=n {
+            if let Ok(e) = entry(&part(name, i)) {
+                let _ = e.delete_credential();
+            }
+        }
     }
 
     pub fn remove(name: &str) {
+        remove_parts(name);
         if let Ok(e) = entry(name) {
             let _ = e.delete_credential();
         }

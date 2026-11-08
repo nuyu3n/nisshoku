@@ -175,7 +175,8 @@ export async function newWorkNote(workId: string, kind: NoteKind | "chapter", fo
     kind === "character"
       ? await dialogs.prompt(L("新しい登場人物", "New character"), { placeholder: L("名前", "Name") })
       : await dialogs.prompt(L("新しい資料", "New material"), { placeholder: L("題名（世界観、年表、地図…）", "Title (setting, timeline, map…)") });
-  if (title === null) return;
+  // (An empty name would make a character no one can find in the text or the lists.)
+  if (title === null || !title.trim()) return;
   const note = await api.createWorkNote(workId, kind as NoteKind, title.trim()).catch(report);
   if (!note) return;
   await openNote(note.id, note.parentId);
@@ -245,6 +246,18 @@ export async function compileWork(workId: string, format: "txt" | "md" | "html")
   }
   await api.writeTextFile(path, contents + "\n").catch(report);
   useStore.getState().toast(L(`${chapters} 章をまとめて書き出しました`, `Compiled ${chapters} chapters`));
+}
+
+/** Writes the work as an EPUB book, vertical (縦書き) or horizontal. */
+export async function exportEpub(workId: string, vertical: boolean): Promise<void> {
+  await flush();
+  const overview = useWork.getState().overview;
+  const title = overview?.id === workId ? overview.title : (useStore.getState().folders.find((f) => f.id === workId)?.title ?? "book");
+  const name = (title || "book").replace(/[\\/:*?"<>|]/g, "_");
+  const path = await saveDialog({ defaultPath: `${name}.epub`, filters: [{ name: "EPUB", extensions: ["epub"] }] });
+  if (!path) return;
+  const n = await api.exportEpub(workId, path, vertical).catch(report);
+  if (n !== undefined) useStore.getState().toast(L(`${n} 章を EPUB に書き出しました`, `Wrote ${n} chapters as EPUB`));
 }
 
 // -------------------------------------------------------------------------

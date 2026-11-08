@@ -32,8 +32,13 @@ pub fn set(user_data: &str, key: &str, value: Option<Value>) -> String {
                 json!({ "v": v, "t": nisshoku_core::time::now_ms() }),
             );
         }
+        // A key that was set is marked deleted rather than dropped, so that
+        // merging with another device's copy (see nisshoku_core::user_data)
+        // does not bring it back.
         None => {
-            ns.remove(key);
+            if ns.contains_key(key) {
+                ns.insert(key.into(), json!({ "d": 1, "t": nisshoku_core::time::now_ms() }));
+            }
         }
     }
     if ns.is_empty() {
@@ -59,7 +64,8 @@ mod tests {
         let s = set(&s, "goal", None);
         assert_eq!(get(&s, "goal"), None);
         let parse = |s: &str| serde_json::from_str::<Value>(s).unwrap();
-        assert_eq!(parse(&s), parse(other));
+        assert_eq!(parse(&s)["org.joplinapp.plugin"], parse(other)["org.joplinapp.plugin"]);
+        assert_eq!(parse(&s)[NAMESPACE]["goal"]["d"], 1);
         assert_eq!(set("", "goal", None), "");
     }
 }

@@ -39,10 +39,7 @@ async function go(from: string[], to: string[]) {
     moving = true;
     try {
       // Open it where it lives if the current list doesn't have it.
-      if (!useStore.getState().notes.some((n) => n.id === id) && note.deletedTime === 0) {
-        await useStore.getState().setScope({ kind: "folder", id: note.parentId });
-      }
-      useStore.getState().select(id);
+      await useStore.getState().openNote(id);
     } finally {
       moving = false;
     }

@@ -24,6 +24,18 @@ export function loadResources(): Promise<void> {
   return loaded;
 }
 
+/** Points the images on the page at their files again (after a sync brought files that were missing). */
+export function refreshImages() {
+  for (const img of document.querySelectorAll<HTMLImageElement>("img[data-src^=':/']")) {
+    const url = resourceUrl(img.dataset.src);
+    if (!url) continue;
+    if (img.getAttribute("src") !== url || !img.complete || img.naturalWidth === 0) {
+      img.removeAttribute("src");
+      img.setAttribute("src", url);
+    }
+  }
+}
+
 export function resourcesReady() {
   return loaded ?? loadResources();
 }
@@ -79,7 +91,7 @@ export async function insertFiles(editor: Editor, list: FileList | File[], pos?:
   const all = Array.from(list);
   for (const file of all) {
     try {
-      const data = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const data = new Uint8Array(await file.arrayBuffer());
       const r = await api.saveResource(file.name || "file", file.type || "application/octet-stream", data);
       insertResource(editor, r, file.name || r.title, pos);
     } catch (e) {
@@ -109,8 +121,19 @@ export async function openAttachment(id: string) {
     useStore.getState().set({ preview: { title: r.title, url: assetUrl(r.path), id } });
     return;
   }
-  await api.openResource(id).catch(report);
+  // Files that run as programs could have come from anyone who can write to
+  // the sync target: ask first.
+  const ext = (r?.path.match(/\.([A-Za-z0-9]+)$/)?.[1] ?? "").toLowerCase();
+  if (RISKY.has(ext)) {
+    const { dialogs } = await import("../components/Dialogs");
+    const ok = await dialogs.confirm(t("attach.riskyTitle"), t("attach.riskyDetail", { name: r?.title ?? ext }), { okLabel: t("attach.riskyOk"), danger: true });
+    if (!ok) return;
+  }
+  await api.openResource(id, RISKY.has(ext)).catch(report);
 }
+
+/** Extensions that run code when opened. */
+const RISKY = new Set(["exe", "bat", "cmd", "com", "scr", "pif", "msi", "msp", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "lnk", "reg", "cpl", "jar", "sh", "app", "desktop", "appimage", "run", "apk", "dll", "url", "scf", "inf", "chm", "ps1xml", "psm1", "msc", "gadget", "application", "xbap"]);
 
 /** Whether a `:/id` link points to an attachment (and not to a note). */
 export function isAttachment(id: string): boolean {

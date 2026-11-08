@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono = "0.4.45"
+encoding_rs = "0.8"
 nisshoku-core = { path = "../../../crates/nisshoku-core" }
 nisshoku-sync = { path = "../../../crates/nisshoku-sync" }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
@@ -23,9 +24,12 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tokio = { version = "1.54.1", features = ["rt", "macros", "sync", "time"] }
 tracing = "0.1.44"
+unicode-normalization = "0.1"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 # On Linux: the Secret Service (GNOME Keyring, KWallet), which keeps secrets
@@ -33,6 +37,7 @@ tracing = "0.1.44"
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native-async-persistent", "async-io", "crypto-rust"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
 
 # reqwest verifies certificates with Android's trust manager, which needs the
 # JVM handed to it at start-up.

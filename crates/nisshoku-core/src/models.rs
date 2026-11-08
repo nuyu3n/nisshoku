@@ -47,6 +47,9 @@ pub trait Model: Sized + Clone + Send + 'static {
     fn updated_time(&self) -> i64;
     /// Sets the timestamps for a local modification at time `t`.
     fn touch(&mut self, t: i64, is_new: bool);
+    /// Sets only the sync timestamp (`updated_time`): a change of metadata
+    /// that the user does not see as an edit of the item.
+    fn touch_meta(&mut self, t: i64);
 
     fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self>;
     /// Values for each of [`Self::FIELDS`], followed by the `extra_props` JSON.
@@ -230,6 +233,14 @@ macro_rules! define_model {
                         "updated_time" | "user_updated_time" => TimeField::set(&mut self.$field, t),
                         "created_time" | "user_created_time" if is_new => TimeField::set_if_unset(&mut self.$field, t),
                         _ => {}
+                    }
+                )*
+            }
+
+            fn touch_meta(&mut self, t: i64) {
+                $(
+                    if stringify!($field) == "updated_time" {
+                        TimeField::set(&mut self.$field, t);
                     }
                 )*
             }
@@ -427,11 +438,40 @@ impl ModelDefaults for Resource {
 
 impl Resource {
     /// Name of the local file holding this resource's data.
+    ///
+    /// The extension comes from synced metadata, which anyone who can write
+    /// to the sync target controls: only a short alphanumeric one is used,
+    /// so that the name can never leave the resource directory.
     pub fn file_name(&self) -> String {
-        if self.file_extension.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}.{}", self.id, self.file_extension)
+        match self.safe_extension() {
+            Some(ext) => format!("{}.{ext}", self.id),
+            None => self.id.clone(),
+        }
+    }
+
+    /// The file extension if it is safe to use in a file name.
+    pub fn safe_extension(&self) -> Option<&str> {
+        let ext = self.file_extension.as_str();
+        (!ext.is_empty() && ext.len() <= 16 && ext.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .then_some(ext)
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    #[test]
+    fn file_names_stay_in_the_resource_directory() {
+        let mut r = Resource {
+            id: "0123456789abcdef0123456789abcdef".into(),
+            file_extension: "png".into(),
+            ..Default::default()
+        };
+        assert_eq!(r.file_name(), "0123456789abcdef0123456789abcdef.png");
+        for evil in ["../../evil.bat", "x/../../y", "a\\..\\b", "png\0", "a.b", &"x".repeat(17)] {
+            r.file_extension = evil.into();
+            assert_eq!(r.file_name(), r.id, "{evil:?}");
         }
     }
 }

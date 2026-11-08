@@ -592,6 +592,31 @@ impl Synchronizer {
             _ => {}
         }
         self.apply_remote(&remote, Some(&local))?;
+        // App data (`user_data`) is merged key by key, so that what was
+        // changed here and not there survives; the merge goes out next sync.
+        let merged = match (&local, &remote) {
+            (AnyItem::Note(l), AnyItem::Note(r)) => {
+                Some(nisshoku_core::user_data::merge(&l.user_data, &r.user_data)).filter(|m| *m != r.user_data)
+            }
+            (AnyItem::Folder(l), AnyItem::Folder(r)) => {
+                Some(nisshoku_core::user_data::merge(&l.user_data, &r.user_data)).filter(|m| *m != r.user_data)
+            }
+            _ => None,
+        };
+        if let Some(user_data) = merged {
+            let db = self.db();
+            match db.load_any(remote.item_type(), remote.id())? {
+                Some(AnyItem::Note(mut n)) => {
+                    n.user_data = user_data;
+                    db.save_meta(&mut n)?;
+                }
+                Some(AnyItem::Folder(mut f)) => {
+                    f.user_data = user_data;
+                    db.save_meta(&mut f)?;
+                }
+                _ => {}
+            }
+        }
         run.report.updated_local += 1;
         Ok(())
     }
@@ -1022,12 +1047,14 @@ impl Synchronizer {
     fn size_matches(&self, r: &Resource, path: &std::path::Path) -> Result<bool> {
         let key = format!("sync.{}.sizeMismatch.{}", self.target(), r.id);
         let actual = std::fs::metadata(path)?.len() as i64;
+        let db = self.db();
         if r.size < 0 || actual == r.size {
+            db.delete_setting(&key)?;
             return Ok(true);
         }
-        let db = self.db();
         let attempts: u32 = db.setting(&key)?.and_then(|v| v.parse().ok()).unwrap_or(0) + 1;
         if attempts >= SIZE_MISMATCH_RETRIES {
+            db.delete_setting(&key)?;
             tracing::warn!(
                 "resource {}: data is {actual} bytes but metadata says {}; accepting it",
                 r.id,

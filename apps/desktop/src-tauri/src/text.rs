@@ -1,6 +1,26 @@
 //! Text measures for writing: character counts that ignore Markdown syntax,
 //! excerpts for lists.
 
+/// Text folded for searching: full- and half-width forms alike (NFKC),
+/// katakana as hiragana, and lower case, so that `ﾆｯｼｮｸ`, `ニッショク` and
+/// `にっしょく` find each other.
+pub fn search_fold(text: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    text.nfkc()
+        .map(|c| match c {
+            '\u{30A1}'..='\u{30F6}' => char::from_u32(c as u32 - 0x60).unwrap_or(c),
+            c => c,
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Whether `text` contains every word of `query` (folded as above).
+pub fn matches_query(text: &str, query: &str) -> bool {
+    let hay = search_fold(text);
+    search_fold(query).split_whitespace().all(|t| hay.contains(t))
+}
+
 /// Characters of prose in a Markdown body: whitespace, Markdown markers,
 /// link targets and ruby notation markers are not counted.
 pub fn count_chars(markdown: &str) -> usize {
@@ -176,6 +196,14 @@ mod tests {
         );
         assert_eq!(count_chars("|漢字《かんじ》"), 5);
         assert_eq!(count_chars("---\n\n1. 一\n2. 二"), 2);
+    }
+
+    #[test]
+    fn search_ignores_width_and_kana() {
+        assert!(matches_query("日食のﾉｰﾄ", "のーと"));
+        assert!(matches_query("ニッショク", "にっしょく"));
+        assert!(matches_query("ＡＢＣ 123", "abc １２３"));
+        assert!(!matches_query("日食", "月食"));
     }
 
     #[test]

@@ -107,20 +107,61 @@ fn target(db: &Database) -> TargetConfig {
         .unwrap_or_default()
 }
 
-/// Switching to another target starts its sync state afresh.
+const TARGET_IDS_SETTING: &str = "app.sync.targetIds";
+
+/// Switching to another target starts its sync state afresh. Coming back to
+/// a target used before (signing in again, after a disconnect) takes up its
+/// state again: otherwise everything would be compared anew (conflict
+/// copies for every difference) and deletions not yet sent would be lost.
 fn set_target(db: &Database, config: &TargetConfig) -> CmdResult<()> {
-    let next_id = db
-        .setting(TARGET_ID_SETTING)
+    let key = serde_json::to_string(config).map_err(err)?;
+    let mut known: std::collections::BTreeMap<String, i64> = db
+        .setting(TARGET_IDS_SETTING)
         .ok()
         .flatten()
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(0)
-        + 1;
-    db.set_setting(TARGET_ID_SETTING, &next_id.to_string())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let current = target(db);
+    if current != TargetConfig::None {
+        known.insert(serde_json::to_string(&current).map_err(err)?, target_id(db));
+    }
+    let id = match known.get(&key) {
+        Some(id) if *config != TargetConfig::None => *id,
+        _ => {
+            let next = db
+                .setting(TARGET_ID_SETTING)
+                .ok()
+                .flatten()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0)
+                .max(known.values().copied().max().unwrap_or(0))
+                + 1;
+            if *config != TargetConfig::None {
+                known.insert(key.clone(), next);
+            }
+            next
+        }
+    };
+    let same = current == *config;
+    db.set_setting(TARGET_IDS_SETTING, &serde_json::to_string(&known).map_err(err)?)
         .map_err(err)?;
-    db.set_setting(TARGET_SETTING, &serde_json::to_string(config).map_err(err)?)
-        .map_err(err)?;
-    db.set_setting(LAST_SYNC_SETTING, "0").map_err(err)
+    db.set_setting(TARGET_ID_SETTING, &id.to_string()).map_err(err)?;
+    db.set_setting(TARGET_SETTING, &key).map_err(err)?;
+    if !same {
+        db.set_setting(LAST_SYNC_SETTING, "0").map_err(err)?;
+    }
+    Ok(())
+}
+
+/// Changing the target while a sync runs would mix the two up.
+fn not_syncing(state: &AppState) -> CmdResult<tokio::sync::MutexGuard<'_, ()>> {
+    state.sync_lock.try_lock().map_err(|_| {
+        tr(
+            "同期中です。終わってからもう一度お試しください",
+            "A sync is running. Please try again when it is done",
+        )
+        .to_string()
+    })
 }
 
 fn target_id(db: &Database) -> i64 {
@@ -199,6 +240,7 @@ pub fn set_local_target<R: Runtime>(
             "Could not create the folder: {e}"
         )
     })?;
+    let _guard = not_syncing(&state)?;
     set_target(&state.db(), &TargetConfig::Local { path })?;
     reset_status(&app);
     Ok(())
@@ -206,6 +248,7 @@ pub fn set_local_target<R: Runtime>(
 
 #[tauri::command]
 pub fn disconnect_sync<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>) -> CmdResult<()> {
+    let _guard = not_syncing(&state)?;
     set_target(&state.db(), &TargetConfig::None)?;
     secrets::remove(secrets::NEXTCLOUD_PASSWORD);
     secrets::remove(secrets::GDRIVE_REFRESH_TOKEN);
@@ -313,8 +356,9 @@ async fn finish_nextcloud<R: Runtime>(
             "Could not connect to Nextcloud: {e}"
         )
     })?;
-    secrets::set(secrets::NEXTCLOUD_PASSWORD, password)?;
     let state = app.state::<AppState>();
+    let _guard = not_syncing(&state)?;
+    secrets::set(secrets::NEXTCLOUD_PASSWORD, password)?;
     set_target(
         &state.db(),
         &TargetConfig::Nextcloud {
@@ -385,6 +429,8 @@ pub async fn gdrive_login<R: Runtime>(
                 "Could not connect to Google Drive: {e}"
             )
         })?;
+    let state = app.state::<AppState>();
+    let _guard = not_syncing(&state)?;
     secrets::set(secrets::GDRIVE_REFRESH_TOKEN, &tokens.refresh_token)?;
     if own.is_some() {
         secrets::set(secrets::GDRIVE_CLIENT_SECRET, &secret)?;
@@ -428,6 +474,8 @@ pub async fn onedrive_login<R: Runtime>(
             "Could not connect to OneDrive: {e}"
         )
     })?;
+    let state = app.state::<AppState>();
+    let _guard = not_syncing(&state)?;
     secrets::set(secrets::ONEDRIVE_REFRESH_TOKEN, &tokens.refresh_token)?;
     set_target(
         &app.state::<AppState>().db(),
@@ -585,7 +633,9 @@ async fn storage(config: &TargetConfig) -> Result<Option<Arc<dyn RemoteStorage>>
             // Google may hand out a new refresh token; keep it.
             let listener: nisshoku_sync::drivers::TokenListener = Arc::new(|t: &OAuthTokens| {
                 if !t.refresh_token.is_empty() {
-                    let _ = secrets::set(secrets::GDRIVE_REFRESH_TOKEN, &t.refresh_token);
+                    if let Err(e) = secrets::set(secrets::GDRIVE_REFRESH_TOKEN, &t.refresh_token) {
+                        tracing::error!("could not keep the new refresh token: {e}");
+                    }
                 }
             });
             Arc::new(
@@ -606,7 +656,9 @@ async fn storage(config: &TargetConfig) -> Result<Option<Arc<dyn RemoteStorage>>
             // Microsoft rotates refresh tokens; keep the latest.
             let listener: nisshoku_sync::drivers::TokenListener = Arc::new(|t: &OAuthTokens| {
                 if !t.refresh_token.is_empty() {
-                    let _ = secrets::set(secrets::ONEDRIVE_REFRESH_TOKEN, &t.refresh_token);
+                    if let Err(e) = secrets::set(secrets::ONEDRIVE_REFRESH_TOKEN, &t.refresh_token) {
+                        tracing::error!("could not keep the new refresh token: {e}");
+                    }
                 }
             });
             Arc::new(
@@ -635,7 +687,7 @@ async fn synchronizer(state: &AppState) -> Result<Option<Synchronizer>, String> 
         SyncOptions {
             target_id,
             resource_dir: state.resource_dir.clone(),
-            client_type: "desktop".into(),
+            client_type: if cfg!(target_os = "android") { "mobile" } else { "desktop" }.into(),
             master_password: secrets::get(secrets::MASTER_PASSWORD),
             mutex_timing: Default::default(),
         },

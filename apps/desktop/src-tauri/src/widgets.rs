@@ -178,7 +178,7 @@ pub fn apply_actions(dir: &Path, db: &Database) -> CmdResult<usize> {
                     && n.deleted_time == 0
                 {
                     n.todo_completed = if time > 0 { time } else { now_ms() };
-                    db.save(&mut n).map_err(err)?;
+                    db.save_meta(&mut n).map_err(err)?;
                     changed += 1;
                 }
             }

@@ -31,13 +31,23 @@ function selectNeighbor(id: string) {
 
 export async function trashNote(id: string) {
   await flush();
+  try {
+    await api.trashNote(id);
+  } catch (e) {
+    report(e);
+    return;
+  }
   selectNeighbor(id);
-  await api.trashNote(id).catch(report);
   await store().refresh();
   store().toast(t("toast.trashed"), {
     label: t("toast.undo"),
     run: async () => {
-      await api.restoreNote(id);
+      try {
+        await api.restoreNote(id);
+      } catch (e) {
+        report(e);
+        return;
+      }
       await store().refresh();
       store().select(id);
     },
@@ -47,7 +57,7 @@ export async function trashNote(id: string) {
 export async function restoreNote(id: string) {
   await api.restoreNote(id).catch(report);
   await store().refresh();
-  store().reloadNote();
+  store().reloadNoteIf(id);
 }
 
 export async function deleteForever(id: string) {
@@ -70,7 +80,7 @@ export async function moveNote(id: string, folderId: string) {
   await flush();
   await api.moveNote(id, folderId).catch(report);
   await store().refresh();
-  store().reloadNote();
+  store().reloadNoteIf(id);
   store().toast(t("folder.moved", { name: folderPath(folderId).join(" / ") }));
 }
 
@@ -203,7 +213,7 @@ export async function editTags(noteId: string, current: string[]) {
   await api.setNoteTags(noteId, titles).catch(report);
   await store().loadFolders();
   await store().loadNotes();
-  store().reloadNote();
+  store().reloadNoteIf(noteId);
 }
 
 export async function togglePin(note: { id: string; pinned: boolean }) {
@@ -215,7 +225,7 @@ export async function toggleTodo(note: { id: string; isTodo: boolean }) {
   await flush();
   await api.setNoteTodo(note.id, !note.isTodo).catch(report);
   await store().loadNotes();
-  store().reloadNote();
+  store().reloadNoteIf(note.id);
 }
 
 export async function saveTemplate(noteId: string) {
@@ -311,7 +321,7 @@ function workKindMenu(note: NoteSummary): MenuItem[] {
   const set = async (kind: NoteKind | null) => {
     await api.setNoteKind(note.id, kind).catch(report);
     await store().loadNotes();
-    store().reloadNote();
+    store().reloadNoteIf(note.id);
     const w = await import("./works");
     await w.reloadWork();
     w.useWork.setState({ tab: kind === "character" ? "characters" : kind === "material" ? "materials" : "manuscript" });
@@ -469,9 +479,27 @@ export function folderMenu(folder: Folder): MenuItem[] {
         const ok = await dialogs.confirm(t("folder.trashConfirm", { name: folder.title }), t("folder.trashDetail"), { okLabel: t("folder.trash"), danger: true });
         if (!ok) return;
         await flush();
-        await api.trashFolder(folder.id).catch(report);
-        if (active) await store().setScope({ kind: "all" });
+        // What goes with it: this notebook and every one inside.
+        const inside = (id: string | undefined) => {
+          const f = store().folders.find((x) => x.id === id);
+          return !!f && isInside(f, folder.id);
+        };
+        const scope = store().scope;
+        const listInside = active || (scope.kind === "folder" && inside(scope.id));
+        // (The open note may not be in the list shown: ask for its notebook.)
+        const selected = store().selectedId;
+        const open = selected ? await api.getNote(selected).catch(() => null) : null;
+        const openInside = !!open && inside(open.parentId);
+        try {
+          await api.trashFolder(folder.id);
+        } catch (e) {
+          report(e);
+          return;
+        }
+        if (listInside) await store().setScope({ kind: "all" });
         await store().refresh();
+        // The note being written went to the trash too: show it as it is now (read-only).
+        if (openInside && open) store().reloadNoteIf(open.id);
       } },
   ];
 }

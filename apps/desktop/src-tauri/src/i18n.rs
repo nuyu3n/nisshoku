@@ -5,6 +5,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static ENGLISH: AtomicBool = AtomicBool::new(false);
 
+pub fn is_english() -> bool {
+    ENGLISH.load(Ordering::Relaxed)
+}
+
 pub fn set_english(english: bool) {
     ENGLISH.store(english, Ordering::Relaxed);
 }

@@ -115,10 +115,7 @@ export function CommandPalette() {
     if (!item) return;
     close();
     if (item.kind === "note") {
-      const s = useStore.getState();
-      if (!s.notes.some((n) => n.id === item.note.id)) {
-        void s.setScope({ kind: "all" }).then(() => s.select(item.note.id));
-      } else s.select(item.note.id);
+      void useStore.getState().openNote(item.note.id);
     } else item.cmd.run();
   };
 

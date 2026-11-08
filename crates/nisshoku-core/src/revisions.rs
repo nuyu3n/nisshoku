@@ -209,10 +209,29 @@ impl Database {
     /// Makes a revision's version the current one (re-creating the note if it
     /// was deleted). The current version is recorded first.
     pub fn restore_revision(&self, note_id: &str, revision_id: &str) -> Result<Note> {
-        let mut restored = self.note_at_revision(note_id, revision_id)?;
-        if let Some(current) = self.load::<Note>(note_id)? {
-            self.create_revision(&current)?;
-        }
+        let old = self.note_at_revision(note_id, revision_id)?;
+        let mut restored = match self.load::<Note>(note_id)? {
+            // Only the text goes back: where the note is, its tags, comments,
+            // pin and other app data stay as they are now.
+            Some(current) => {
+                self.create_revision(&current)?;
+                Note {
+                    title: old.title,
+                    body: old.body,
+                    ..current
+                }
+            }
+            None => {
+                // Re-created: in its notebook if that still exists.
+                let mut n = old;
+                if self.load::<crate::models::Folder>(&n.parent_id)?.is_none_or(|f| f.deleted_time != 0) {
+                    n.parent_id = String::new();
+                }
+                n.deleted_time = 0;
+                n.is_conflict = 0;
+                n
+            }
+        };
         self.save(&mut restored)?;
         Ok(restored)
     }
@@ -262,24 +281,44 @@ impl Database {
         self.save(note)
     }
 
+    /// Notes changed since their latest revision, when that revision is old
+    /// enough to take another ([`MIN_INTERVAL_MS`]). One pass over the
+    /// tables, so that it can run often on large libraries.
+    pub fn notes_needing_revision(&self) -> Result<Vec<String>> {
+        let now = now_ms();
+        let mut stmt = self.conn().prepare(
+            "SELECT n.id FROM notes n
+             LEFT JOIN (SELECT item_id, MAX(item_updated_time) AS t, MAX(created_time) AS c
+                        FROM revisions GROUP BY item_id) r ON r.item_id = n.id
+             WHERE n.is_conflict = 0
+               AND (r.item_id IS NULL OR (n.updated_time > r.t AND ?1 - r.c >= ?2))",
+        )?;
+        let ids = stmt.query_map(rusqlite::params![now, MIN_INTERVAL_MS], |row| row.get(0))?;
+        Ok(ids.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// Records the current version of notes changed since their latest
     /// revision, when that revision is old enough. Returns how many.
     pub fn collect_revisions(&self) -> Result<usize> {
-        let now = now_ms();
         let mut created = 0;
-        for note in self.query::<Note, _>("is_conflict = 0", [])? {
-            let latest = self.latest_revision(&note.id)?;
-            let changed = latest
-                .as_ref()
-                .is_none_or(|r| note.updated_time > r.item_updated_time);
-            let due = latest
-                .as_ref()
-                .is_none_or(|r| now - r.created_time >= MIN_INTERVAL_MS);
-            if changed && due && self.create_revision(&note)?.is_some() {
+        for id in self.notes_needing_revision()? {
+            if let Some(note) = self.load::<Note>(&id)?
+                && self.create_revision(&note)?.is_some()
+            {
                 created += 1;
             }
         }
         Ok(created)
+    }
+
+    /// Deletes every revision of a note (for example once it is locked, so
+    /// that its earlier text does not stay readable in the history).
+    pub fn delete_revisions(&self, note_id: &str) -> Result<usize> {
+        let revisions = self.revisions(note_id)?;
+        for r in &revisions {
+            self.delete(ItemType::Revision, &r.id)?;
+        }
+        Ok(revisions.len())
     }
 
     /// Deletes revisions older than `ttl_ms`. When a note keeps newer

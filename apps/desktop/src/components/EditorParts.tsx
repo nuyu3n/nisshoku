@@ -253,7 +253,7 @@ export function StatusBar({ editor, chars, withSpaces, selection, pages, lines, 
           title={t("status.timerHint")}
           onClick={async () => {
             const v = await dialogs.prompt(t("timer.title"), { initial: String(prefs.timerMinutes), message: t("timer.message") });
-            const min = v ? parseInt(v, 10) : NaN;
+            const min = v ? parseInt(v.normalize("NFKC"), 10) : NaN;
             if (Number.isFinite(min) && min > 0) setTimer({ end: Date.now() + min * 60000, startChars: chars });
           }}
         >

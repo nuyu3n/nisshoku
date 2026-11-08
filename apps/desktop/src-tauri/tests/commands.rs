@@ -568,3 +568,82 @@ fn diary_events_and_memo() {
         1
     );
 }
+
+#[test]
+fn saving_over_a_change_from_elsewhere_keeps_it() {
+    let t = TestApp::new();
+    let n: Value = t.call(
+        "create_note",
+        json!({ "parentId": null, "title": "題", "body": "一稿" }),
+    );
+    let id = n["id"].as_str().unwrap();
+    // Opened with "一稿"; meanwhile a sync brought "別の端末".
+    t.call::<Value>(
+        "save_note",
+        json!({ "id": id, "title": "題", "body": "別の端末" }),
+    );
+    let saved: Value = t.call(
+        "save_note",
+        json!({ "id": id, "title": "題", "body": "ここで書いた", "baseTitle": "題", "baseBody": "一稿" }),
+    );
+    let conflict = saved["conflictId"].as_str().expect("a conflict copy");
+    assert_eq!(t.call::<Value>("get_note", json!({ "id": conflict }))["body"], "別の端末");
+    assert_eq!(t.call::<Value>("get_note", json!({ "id": id }))["body"], "ここで書いた");
+
+    // Saving from the stored text is no conflict.
+    let again: Value = t.call(
+        "save_note",
+        json!({ "id": id, "title": "題", "body": "三稿", "baseTitle": "題", "baseBody": "ここで書いた" }),
+    );
+    assert!(again.get("conflictId").is_none());
+}
+
+#[test]
+fn conflicts_are_resolved() {
+    let t = TestApp::new();
+    let n: Value = t.call("create_note", json!({ "parentId": null, "title": "題", "body": "一稿" }));
+    let id = n["id"].as_str().unwrap();
+    t.call::<Value>("save_note", json!({ "id": id, "title": "題", "body": "別の端末" }));
+    let saved: Value = t.call(
+        "save_note",
+        json!({ "id": id, "title": "題", "body": "ここ", "baseTitle": "題", "baseBody": "一稿" }),
+    );
+    let copy = saved["conflictId"].as_str().unwrap();
+    let kept: String = t.call("resolve_conflict", json!({ "id": copy, "keep": "copy" }));
+    assert_eq!(kept, id);
+    assert_eq!(t.call::<Value>("get_note", json!({ "id": id }))["body"], "別の端末");
+    assert!(t.try_call::<Value>("get_note", json!({ "id": copy })).is_err());
+}
+
+#[test]
+fn tasks_go_to_the_chosen_notebook_while_it_exists() {
+    let t = TestApp::new();
+    let book: String = t.call("create_folder", json!({ "title": "仕事", "parentId": null }));
+    let task: Value = t.call(
+        "create_task",
+        json!({ "title": "電話", "parentId": book, "due": 0, "allDay": false }),
+    );
+    assert_eq!(task["parentId"], book.as_str());
+    t.call::<()>("trash_folder", json!({ "id": book }));
+    let task: Value = t.call(
+        "create_task",
+        json!({ "title": "メール", "parentId": book, "due": 0, "allDay": false }),
+    );
+    assert_ne!(task["parentId"], book.as_str());
+}
+
+#[test]
+fn renaming_a_tag_to_another_merges_them() {
+    let t = TestApp::new();
+    let a: Value = t.call("create_note", json!({ "parentId": null, "title": "a", "body": "" }));
+    let b: Value = t.call("create_note", json!({ "parentId": null, "title": "b", "body": "" }));
+    t.call::<()>("set_note_tags", json!({ "noteId": a["id"], "titles": ["下書き"] }));
+    t.call::<()>("set_note_tags", json!({ "noteId": b["id"], "titles": ["draft"] }));
+    let tags: Value = t.call("list_tags", json!({}));
+    let draft = tags.as_array().unwrap().iter().find(|x| x["title"] == "draft").unwrap()["id"].clone();
+    assert!(t.try_call::<()>("rename_tag", json!({ "id": draft, "title": "  " })).is_err());
+    t.call::<()>("rename_tag", json!({ "id": draft, "title": "下書き" }));
+    let tags: Value = t.call("list_tags", json!({}));
+    assert_eq!(tags.as_array().unwrap().len(), 1);
+    assert_eq!(tags[0]["noteCount"], 2);
+}

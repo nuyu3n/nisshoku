@@ -134,22 +134,33 @@ export function groupTasks(tasks: NoteSummary[], now = new Date()): Record<TaskG
 }
 
 /** Ticks a task off (or back on), with an undo in the toast. */
-export async function setTaskDone(task: NoteSummary, done: boolean) {
+export async function setTaskDone(task: NoteSummary, done: boolean): Promise<boolean> {
   const s = useStore.getState();
-  await api.setTodoCompleted(task.id, done).catch(report);
+  try {
+    await api.setTodoCompleted(task.id, done);
+  } catch (e) {
+    report(e);
+    return false;
+  }
   await Promise.all([s.loadNotes(), s.loadFolders()]);
-  s.reloadNote();
+  s.reloadNoteIf(task.id);
   if (done) {
     s.toast(L(`「${task.title || "無題"}」を完了しました`, `Done: ${task.title || "Untitled"}`), {
       label: L("元に戻す", "Undo"),
       run: () => void setTaskDone(task, false),
     });
   }
+  return true;
 }
 
 export async function setTaskDue(id: string, due: Due) {
-  await api.setTodoDue(id, due.due, due.allDay).catch(report);
+  try {
+    await api.setTodoDue(id, due.due, due.allDay);
+  } catch (e) {
+    report(e);
+    return;
+  }
   const s = useStore.getState();
   await s.loadNotes();
-  s.reloadNote();
+  s.reloadNoteIf(id);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type InstallKind, type SyncSettings } from "../api";
+import { api, isTauri, type InstallKind, type StorageInfo, type SyncSettings } from "../api";
 import { appVersion, checkForUpdate, installUpdate, openReleasePage, useUpdate } from "../lib/updates";
 import { report, useStore, type Preferences } from "../store";
 import { lang } from "../i18n";
@@ -146,6 +146,7 @@ function GeneralTab() {
   const [language, setLanguage] = usePref("language");
   const [theme, setTheme] = usePref("theme");
   const [notebook, setNotebook] = usePref("defaultNotebookName");
+  const [reminders, setReminders] = usePref("taskReminders");
   return (
     <>
       <h3>{L("一般", "General")}</h3>
@@ -191,6 +192,21 @@ function GeneralTab() {
         hint={L("ノートブックがひとつもないときに、自動で作るノートブックの名前です。", "Used for the notebook created automatically when there is none.")}
       >
         <TextPref value={notebook} onSave={setNotebook} placeholder="Notes" />
+      </Field>
+      <Field label={L("タスクの期限を通知する", "Notify tasks when due")} hint={L("期限になったタスクを、アプリが開いている間に通知します。", "Shows a notification when a task falls due, while the app is open.")}>
+        <Switch
+          on={reminders}
+          onChange={async (v) => {
+            if (v && isTauri) {
+              const n = await import("@tauri-apps/plugin-notification");
+              if (!(await n.isPermissionGranted()) && (await n.requestPermission()) !== "granted") {
+                useStore.getState().toast(L("通知が許可されていません", "Notifications are not allowed"));
+                return;
+              }
+            }
+            setReminders(v);
+          }}
+        />
       </Field>
     </>
   );
@@ -674,12 +690,19 @@ function PasswordPrompt() {
   return (
     <div className="status-box">
       <div>{L("同期先は暗号化されています。暗号化のパスワードを入力してください。", "The sync target is encrypted. Enter the encryption password.")}</div>
-      <div className="row-buttons">
+      {/* A form, so that Enter unlocks too. */}
+      <form
+        className="row-buttons"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pw) void api.setMasterPassword(pw).catch(report);
+        }}
+      >
         <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
-        <button className="btn primary" disabled={!pw} onClick={() => void api.setMasterPassword(pw).catch(report)}>
+        <button className="btn primary" type="submit" disabled={!pw}>
           {L("ロックを解除", "Unlock")}
         </button>
-      </div>
+      </form>
     </div>
   );
 }
@@ -702,12 +725,20 @@ function EncryptionSection({ hasPassword }: { hasPassword: boolean }) {
             const pw = await dialogs.prompt(L("暗号化のパスワード", "Encryption password"), {
               message: L("ほかの端末でも同じパスワードを入力します。忘れないものにしてください。", "You will enter the same password on your other devices. Choose one you will remember."),
               okLabel: L("暗号化を有効にする", "Turn on encryption"),
+              password: true,
             });
             if (!pw) return;
+            // A typo here would lock the other devices out: type it twice.
+            const again = await dialogs.prompt(L("確認のため、もう一度入力してください", "Type it again to confirm"), { password: true });
+            if (again === null) return;
+            if (again !== pw) {
+              useStore.getState().toast(L("パスワードが一致しません", "The passwords do not match"));
+              return;
+            }
             try {
               await api.setEncryption(true, pw);
               useStore.getState().toast(L("暗号化を有効にしました。次の同期から暗号化して送ります", "Encryption is on. The next sync sends encrypted data"));
-              void api.syncNow();
+              void api.syncNow().catch(report);
             } catch (e) {
               report(e);
             }
@@ -723,7 +754,7 @@ function EncryptionSection({ hasPassword }: { hasPassword: boolean }) {
             try {
               await api.setEncryption(false);
               useStore.getState().toast(L("暗号化を無効にしました", "Encryption is off"));
-              void api.syncNow();
+              void api.syncNow().catch(report);
             } catch (e) {
               report(e);
             }
@@ -822,6 +853,19 @@ function DataTab() {
           </button>
         </Field>
       )}
+      <BackupSection />
+      <Field label={L("ノートの履歴を残す期間", "Keep note history")} hint={L("これより古い版は起動時に削除します。", "Older versions are removed at start.")}>
+        <SelectPref
+          pref="historyDays"
+          options={[
+            [30, L("30日", "30 days")],
+            [90, L("90日", "90 days")],
+            [365, L("1年", "1 year")],
+            [0, L("ずっと", "Always")],
+          ]}
+        />
+      </Field>
+      <StorageSection />
       <Field label={L("ゴミ箱を自動で空にする", "Empty the trash automatically")} hint={L("ゴミ箱に入れてから指定の日数が過ぎたノートを、起動時に完全に削除します。", "Notes in the trash longer than this are deleted at start.")}>
         <SelectPref
           pref="trashRetentionDays"
@@ -834,6 +878,87 @@ function DataTab() {
         />
       </Field>
     </>
+  );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+/** Backups: the automatic daily copies, and a complete one on demand. */
+function BackupSection() {
+  return (
+    <Field
+      label={L("バックアップ", "Backup")}
+      hint={L(
+        "データベースは毎日自動で7日分保存しています。「今すぐバックアップ」は添付ファイルも含めたフォルダを作ります（そのフォルダはプロファイルとしてそのまま開けます）。",
+        "The database is copied every day (the last 7 kept). \"Back up now\" makes a folder with the attachments too (it can be opened as a profile as is).",
+      )}
+    >
+      <div className="row-buttons">
+        {!isMobile && (
+          <button
+            className="btn"
+            onClick={async () => {
+              const dir = await openDialog({ directory: true, title: L("バックアップの保存先", "Back up to folder") });
+              if (typeof dir !== "string") return;
+              const path = await api.backupNow(dir).catch(report);
+              if (path) useStore.getState().toast(L(`バックアップを作りました: ${path}`, `Backed up to ${path}`));
+            }}
+          >
+            <Icon name="download" />
+            {L("今すぐバックアップ", "Back up now")}
+          </button>
+        )}
+        {!isMobile && (
+          <button className="btn" onClick={() => void api.openBackups().catch(report)}>
+            <Icon name="folder" />
+            {L("自動バックアップを開く", "Open daily backups")}
+          </button>
+        )}
+      </div>
+    </Field>
+  );
+}
+
+/** Space used, and attachments no note uses any more. */
+function StorageSection() {
+  const [info, setInfo] = useState<StorageInfo | null>(null);
+  const load = () => void api.storageInfo().then(setInfo, report);
+  useEffect(load, []);
+  if (!info) return null;
+  return (
+    <Field
+      label={L("使用容量", "Storage")}
+      hint={L(
+        `データベース ${formatBytes(info.databaseBytes)}・添付ファイル ${info.resourceCount}件 ${formatBytes(info.resourceBytes)}`,
+        `Database ${formatBytes(info.databaseBytes)}, ${info.resourceCount} attachments ${formatBytes(info.resourceBytes)}`,
+      )}
+    >
+      <button
+        className="btn"
+        disabled={info.unusedCount === 0}
+        onClick={async () => {
+          const ok = await dialogs.confirm(
+            L(`使われていない添付ファイル ${info.unusedCount}件を削除しますか？`, `Delete ${info.unusedCount} unused attachments?`),
+            L(`どのノートからもリンクされていない添付ファイル（${formatBytes(info.unusedBytes)}）を、この端末と同期先から削除します。`, `Attachments no note links to (${formatBytes(info.unusedBytes)}) are deleted here and on the sync target.`),
+            { okLabel: L("削除", "Delete"), danger: true },
+          );
+          if (!ok) return;
+          const n = await api.deleteUnusedResources().catch(report);
+          if (n !== undefined) useStore.getState().toast(L(`${n}件の添付ファイルを削除しました`, `Deleted ${n} attachments`));
+          load();
+        }}
+      >
+        <Icon name="trash" />
+        {info.unusedCount > 0
+          ? L(`未使用の添付 ${info.unusedCount}件（${formatBytes(info.unusedBytes)}）を削除`, `Delete ${info.unusedCount} unused (${formatBytes(info.unusedBytes)})`)
+          : L("未使用の添付ファイルはありません", "No unused attachments")}
+      </button>
+    </Field>
   );
 }
 
@@ -972,10 +1097,6 @@ function ReleaseNotes({ text }: { text: string }) {
   }
   endList();
   return <div className="release-notes">{blocks}</div>;
-}
-
-function formatBytes(n: number) {
-  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
 }
 
 function AboutTab() {

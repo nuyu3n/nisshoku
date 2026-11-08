@@ -6,7 +6,7 @@ import { api, type NoteSummary } from "../api";
 import { lang } from "../i18n";
 import { report, useStore } from "../store";
 import { dueLabel, dueMenu, groupTasks, GROUP_LABELS, isOverdue, setTaskDone, setTaskDue, type Due, type TaskGroup } from "../lib/tasks";
-import { noteMenu } from "../lib/actions";
+import { folderPath, moveSubmenu, noteMenu } from "../lib/actions";
 import { contextMenu, openMenu } from "./ContextMenu";
 import { Icon } from "./Icon";
 import { isMobile } from "../lib/mobile";
@@ -48,11 +48,13 @@ function TaskRow({ task, folder }: { task: NoteSummary; folder?: string }) {
         title={done ? L("未完了に戻す", "Mark as not done") : L("完了にする", "Mark as done")}
         onClick={(e) => {
           if (task.todoCompleted) return void setTaskDone(task, false);
+          if (ticked) return; // already on its way
           setTicked(true);
           // Its height, for folding away when it leaves the open tasks (lib/motion.ts).
           const row = e.currentTarget.closest<HTMLElement>(".task-row");
           if (row) row.dataset.h = String(row.offsetHeight);
-          window.setTimeout(() => void setTaskDone(task, true), 350);
+          // Not saved: show it open again.
+          window.setTimeout(() => void setTaskDone(task, true).then((ok) => ok || setTicked(false)), 350);
         }}
       >
         <Icon name="check" />
@@ -80,10 +82,26 @@ export function TaskList({ tasks }: { tasks: NoteSummary[] }) {
     return () => window.removeEventListener(FOCUS_TASK_INPUT, focus);
   }, []);
 
+  const taskNotebook = useStore((s) => s.prefs.taskNotebook);
+  // In a notebook's list, tasks go there; elsewhere to the chosen notebook
+  // (remembered), if it still exists, or the default one.
+  const inFolder = scope.kind === "folder" ? scope.id : null;
+  const chosen = folders.some((f) => f.id === taskNotebook) ? taskNotebook : "";
+  const parent = inFolder ?? (chosen || null);
+
+  const chooseNotebook = (anchor: HTMLElement) =>
+    openMenu(anchor, [
+      { label: L("既定のノートブック", "Default notebook"), icon: "folder", checked: !chosen, run: () => useStore.getState().setPrefs({ taskNotebook: "" }) },
+      "sep",
+      ...moveSubmenu(
+        (f) => f.isDiary,
+        (id) => useStore.getState().setPrefs({ taskNotebook: id }),
+      ),
+    ]);
+
   const add = async () => {
     if (!title.trim()) return;
-    const parent = scope.kind === "folder" ? scope.id : null;
-    const created = await api.createTask(title, parent, due.due, due.allDay).catch(report);
+    const created = await api.createTask(title.trim(), parent, due.due, due.allDay).catch(report);
     if (!created) return;
     setTitle("");
     setDue({ due: 0, allDay: false });
@@ -115,14 +133,26 @@ export function TaskList({ tasks }: { tasks: NoteSummary[] }) {
           enterKeyHint="done"
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            // On a computer, Enter while composing (Japanese input) only confirms the text;
-            // otherwise the form adds it (phone keyboards send Enter while still composing).
-            if (e.key === "Enter" && e.nativeEvent.isComposing && !isMobile) e.preventDefault();
+            // Enter while composing (Japanese input) only confirms the text. Phone
+            // keyboards send Enter while still composing, so there only the button adds
+            // (as in AddInput).
+            if (e.key === "Enter" && (isMobile || e.nativeEvent.isComposing)) e.preventDefault();
           }}
         />
         <DueChip task={due} onChange={setDue} placeholder />
-        {title.trim() && (
-          <button className="btn primary task-add-btn" type="submit">
+        {!inFolder && (
+          <button
+            type="button"
+            className={`due-chip folder-chip${chosen ? "" : " unset"}`}
+            title={L("追加先のノートブック", "Notebook to add to")}
+            onClick={(e) => chooseNotebook(e.currentTarget)}
+          >
+            <Icon name="folder" />
+            <span className="folder-chip-name">{chosen ? folderPath(chosen).join(" / ") : L("既定", "Default")}</span>
+          </button>
+        )}
+        {(title.trim() || isMobile) && (
+          <button className="btn primary task-add-btn" type="submit" disabled={!title.trim()}>
             {L("追加", "Add")}
           </button>
         )}

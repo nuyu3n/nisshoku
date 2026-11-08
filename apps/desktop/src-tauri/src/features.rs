@@ -135,7 +135,37 @@ pub fn rename_tag(state: State<'_, AppState>, id: String, title: String) -> CmdR
         .load::<Tag>(&id)
         .map_err(err)?
         .ok_or_else(|| tr("タグが見つかりません", "Tag not found").to_string())?;
-    t.title = title.trim().to_string();
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(tr("タグの名前を入力してください", "Enter a name for the tag").into());
+    }
+    // Renamed to the name of another tag: they become one (tags are matched
+    // without regard to case, so two would be confusing duplicates).
+    if let Some(other) = db
+        .all::<Tag>()
+        .map_err(err)?
+        .into_iter()
+        .find(|o| o.id != t.id && o.title.to_lowercase() == title.to_lowercase())
+    {
+        let tagged: std::collections::HashSet<String> = db
+            .query::<NoteTag, _>("tag_id = ?1", [&other.id])
+            .map_err(err)?
+            .into_iter()
+            .map(|nt| nt.note_id)
+            .collect();
+        for nt in db.query::<NoteTag, _>("tag_id = ?1", [&t.id]).map_err(err)? {
+            if !tagged.contains(&nt.note_id) {
+                let mut link = NoteTag {
+                    note_id: nt.note_id.clone(),
+                    tag_id: other.id.clone(),
+                    ..Default::default()
+                };
+                db.save(&mut link).map_err(err)?;
+            }
+        }
+        return db.delete(ItemType::Tag, &t.id).map_err(err);
+    }
+    t.title = title.to_string();
     db.save(&mut t).map_err(err)
 }
 
@@ -158,7 +188,7 @@ pub fn set_note_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> 
     let db = state.db();
     let mut n = load_note(&db, &id)?;
     n.user_data = userdata::set(&n.user_data, "pinned", pinned.then_some(json!(true)));
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -169,7 +199,7 @@ pub fn set_note_todo(state: State<'_, AppState>, id: String, todo: bool) -> CmdR
     if !todo {
         n.todo_completed = 0;
     }
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -182,7 +212,19 @@ pub fn set_todo_completed(
     let mut n = load_note(&db, &id)?;
     n.is_todo = 1;
     n.todo_completed = if completed { now_ms() } else { 0 };
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
+}
+
+/// Gives one note an order of its own (after dragging it between two others).
+#[tauri::command]
+pub fn set_note_order(state: State<'_, AppState>, id: String, order: f64) -> CmdResult<()> {
+    let db = state.db();
+    let mut n = load_note(&db, &id)?;
+    if n.order != order && order.is_finite() {
+        n.order = order;
+        db.save_meta(&mut n).map_err(err)?;
+    }
+    Ok(())
 }
 
 /// Gives notes the manual order of `ids` (first = top). Joplin shows custom
@@ -196,7 +238,7 @@ pub fn set_notes_order(state: State<'_, AppState>, ids: Vec<String>) -> CmdResul
         let order = base - i as f64;
         if n.order != order {
             n.order = order;
-            db.save(&mut n).map_err(err)?;
+            db.save_meta(&mut n).map_err(err)?;
         }
     }
     Ok(())
@@ -310,7 +352,16 @@ pub fn save_resource(
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .filter(|e| e.len() <= 8 && e.chars().all(|c| c.is_ascii_alphanumeric()))
-        .unwrap_or_else(|| mime.rsplit('/').next().unwrap_or("bin").to_string());
+        .unwrap_or_else(|| {
+            // `image/svg+xml` → `svg`; nothing usable → no extension.
+            let sub = mime.rsplit('/').next().unwrap_or("");
+            let sub = sub.split(['+', ';']).next().unwrap_or("").to_lowercase();
+            if !sub.is_empty() && sub.len() <= 8 && sub.chars().all(|c| c.is_ascii_alphanumeric()) {
+                sub
+            } else {
+                String::new()
+            }
+        });
     let mut r = Resource {
         id: nisshoku_core::ids::new_id(),
         title: name.clone(),
@@ -331,6 +382,56 @@ pub fn save_resource(
         title: r.title,
         size: r.size,
     })
+}
+
+/// `save_resource` with the data as the raw body of the call (a pasted file
+/// as a JSON array of numbers is many times its size and slow to parse).
+/// The name (URI-encoded) and type come in the `x-name` and `x-mime` headers.
+#[tauri::command]
+pub fn save_resource_bytes(
+    state: State<'_, AppState>,
+    request: tauri::ipc::Request<'_>,
+) -> CmdResult<ResourceFile> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("expected the file's bytes".into());
+    };
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string()
+    };
+    let name = percent_decode(&header("x-name"));
+    let mime = header("x-mime");
+    save_resource(
+        state,
+        if name.is_empty() { "file".into() } else { name },
+        if mime.is_empty() { "application/octet-stream".into() } else { mime },
+        data.clone(),
+    )
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Some(b) = std::str::from_utf8(&bytes[i + 1..i + 3])
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+        {
+            out.push(b);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Adds a file from disk as a resource (for "insert image").
@@ -364,8 +465,10 @@ pub fn import_resource<R: tauri::Runtime>(
         "bmp" => "image/bmp",
         "pdf" => "application/pdf",
         "txt" | "md" => "text/plain",
-        "doc" | "docx" => "application/msword",
-        "xls" | "xlsx" => "application/vnd.ms-excel",
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls" => "application/vnd.ms-excel",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "zip" => "application/zip",
         "mp3" => "audio/mpeg",
         "wav" => "audio/wav",
@@ -408,6 +511,7 @@ pub fn open_resource<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     id: String,
+    confirmed: Option<bool>,
 ) -> CmdResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let r = state
@@ -415,6 +519,14 @@ pub fn open_resource<R: tauri::Runtime>(
         .load::<Resource>(&id)
         .map_err(err)?
         .ok_or_else(|| tr("添付ファイルが見つかりません", "Attachment not found").to_string())?;
+    // Programs only after the window asked (see editor/images.ts).
+    if is_executable(r.safe_extension().unwrap_or("")) && confirmed != Some(true) {
+        return Err(tr(
+            "プログラムとして実行される添付ファイルは開けません",
+            "Attachments that run as programs are not opened",
+        )
+        .into());
+    }
     let path = state.resource_dir.join(r.file_name());
     if !path.exists() {
         return Err(tr(
@@ -426,6 +538,40 @@ pub fn open_resource<R: tauri::Runtime>(
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(err)
+}
+
+/// The text of an HTML page in its character set: from the HTTP header,
+/// else the page's `<meta charset>`, else UTF-8 (Shift_JIS and EUC-JP pages
+/// are still common in Japan).
+fn decode_html(bytes: &[u8], content_type: &str) -> String {
+    fn charset_in(s: &str) -> Option<&'static encoding_rs::Encoding> {
+        let lower = s.to_ascii_lowercase();
+        let i = lower.find("charset")?;
+        let rest = lower[i + 7..].trim_start().strip_prefix('=')?.trim_start();
+        let rest = rest.trim_start_matches(['"', '\'']);
+        let end = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            .unwrap_or(rest.len());
+        encoding_rs::Encoding::for_label(rest[..end].as_bytes())
+    }
+    let (bom, _) = encoding_rs::Encoding::for_bom(bytes).unzip();
+    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]);
+    let encoding = bom
+        .or_else(|| charset_in(content_type))
+        .or_else(|| charset_in(&head))
+        .unwrap_or(encoding_rs::UTF_8);
+    encoding.decode(bytes).0.into_owned()
+}
+
+/// Extensions of files that run code when opened.
+pub fn is_executable(ext: &str) -> bool {
+    const RISKY: &[&str] = &[
+        "exe", "bat", "cmd", "com", "scr", "pif", "msi", "msp", "ps1", "vbs", "vbe", "js", "jse",
+        "wsf", "wsh", "hta", "lnk", "reg", "cpl", "jar", "sh", "app", "desktop", "appimage", "run",
+        "apk", "dll", "url", "scf", "inf", "chm", "ps1xml", "psm1", "msc", "gadget", "application",
+        "xbap",
+    ];
+    RISKY.contains(&ext.to_lowercase().as_str())
 }
 
 // -------------------------------------------------------------------------
@@ -470,11 +616,30 @@ pub async fn clip_url(
         ));
     }
     let final_url = resp.url().clone();
-    let bytes = resp.bytes().await.map_err(err)?;
-    if bytes.len() > 20 * 1024 * 1024 {
-        return Err(tr("ページが大きすぎます", "The page is too large").into());
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if !content_type.is_empty() && !content_type.contains("html") && !content_type.starts_with("text/") {
+        return Err(tr(
+            "このURLはWebページではありません",
+            "This URL is not a web page",
+        )
+        .into());
     }
-    let html = String::from_utf8_lossy(&bytes).into_owned();
+    // Read as it comes, stopping at the limit (not after downloading it all).
+    const LIMIT: usize = 20 * 1024 * 1024;
+    let mut resp = resp;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(err)? {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() > LIMIT {
+            return Err(tr("ページが大きすぎます", "The page is too large").into());
+        }
+    }
+    let html = decode_html(&bytes, &content_type);
     let (title, body) = crate::clip::html_to_markdown(&html, &final_url);
     let title = if title.is_empty() {
         final_url.to_string()
@@ -490,23 +655,31 @@ pub async fn clip_url(
     );
 
     let db = state.db();
+    // The default notebook (not whichever came first: the diary, a novel…).
     let parent = match parent_id.filter(|p| !p.is_empty()) {
         Some(p) => p,
-        None => db
-            .query::<Folder, _>("deleted_time = 0", [])
-            .map_err(err)?
-            .into_iter()
-            .min_by_key(|f| f.created_time)
-            .map(|f| f.id)
-            .unwrap_or_default(),
+        None => crate::notes::default_folder(&db)?,
     };
     let mut n = Note::new(&parent, &title, &note_body);
     n.source_url = final_url.to_string();
-    if parent.is_empty() {
-        let mut f = Folder::new("", "Notes");
-        db.save(&mut f).map_err(err)?;
-        n.parent_id = f.id;
-    }
     db.save(&mut n).map_err(err)?;
     Ok(crate::notes::dto(&n))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pages_are_read_in_their_charset() {
+        let (sjis, _, _) = encoding_rs::SHIFT_JIS.encode("<p>日本語</p>");
+        assert!(decode_html(&sjis, "text/html; charset=Shift_JIS").contains("日本語"));
+        let mut page = b"<meta charset=\"euc-jp\">".to_vec();
+        page.extend_from_slice(&encoding_rs::EUC_JP.encode("吾輩").0);
+        assert!(decode_html(&page, "text/html").contains("吾輩"));
+        assert!(decode_html("ゆ".as_bytes(), "").contains("ゆ"));
+        assert!(is_executable("EXE") && !is_executable("png"));
+        assert_eq!(percent_decode("%E7%B5%B5.png"), "絵.png");
+        assert_eq!(percent_decode("100%"), "100%");
+    }
 }

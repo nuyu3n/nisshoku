@@ -20,6 +20,7 @@ import {
   STATUSES,
   characterColor,
   compileWork,
+  exportEpub,
   daysLeft,
   emptyWorkMeta,
   newWorkNote,
@@ -415,6 +416,8 @@ export function WorkPanel({ work }: { work: WorkOverview }) {
                 { label: L("テキスト (.txt)", "Text (.txt)"), icon: "download", run: () => compileWork(work.id, "txt") },
                 { label: "Markdown (.md)", icon: "download", run: () => compileWork(work.id, "md") },
                 { label: L("HTML（ルビ付き・印刷用）", "HTML (with ruby, for print)"), icon: "download", run: () => compileWork(work.id, "html") },
+                { label: L("EPUB（縦書き）", "EPUB (vertical)"), icon: "download", run: () => exportEpub(work.id, true) },
+                { label: L("EPUB（横書き）", "EPUB (horizontal)"), icon: "download", run: () => exportEpub(work.id, false) },
               ])
             }
           >

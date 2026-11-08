@@ -70,6 +70,14 @@ export interface ResourceFile {
   size: number;
 }
 
+export interface StorageInfo {
+  databaseBytes: number;
+  resourceBytes: number;
+  resourceCount: number;
+  unusedCount: number;
+  unusedBytes: number;
+}
+
 export interface Note {
   id: string;
   parentId: string;
@@ -78,6 +86,8 @@ export interface Note {
   createdTime: number;
   updatedTime: number;
   isConflict: boolean;
+  /** For a conflict copy, the note it copies. */
+  conflictOriginalId?: string;
   deletedTime: number;
   diaryDate: string | null;
   goal: number | null;
@@ -315,8 +325,9 @@ export const api = {
   getNote: (id: string) => call<Note>("get_note", { id }),
   createNote: (parentId?: string, title?: string, body?: string) =>
     call<Note>("create_note", { parentId: parentId ?? null, title: title ?? null, body: body ?? null }),
-  saveNote: (id: string, title: string, body: string) =>
-    call<NoteSummary>("save_note", { id, title, body }),
+  /** `base`: the text (as stored) the edit started from; a different stored text is kept as a conflict copy. */
+  saveNote: (id: string, title: string, body: string, base?: { title: string; body: string }) =>
+    call<NoteSummary & { conflictId?: string }>("save_note", { id, title, body, baseTitle: base?.title ?? null, baseBody: base?.body ?? null }),
   moveNote: (id: string, parentId: string) => call<void>("move_note", { id, parentId }),
   setNoteGoal: (id: string, goal: number | null) => call<void>("set_note_goal", { id, goal }),
   duplicateNote: (id: string) => call<Note>("duplicate_note", { id }),
@@ -343,6 +354,12 @@ export const api = {
   restoreRevision: (noteId: string, revisionId: string) =>
     call<Note>("restore_revision", { noteId, revisionId }),
   saveSnapshot: (noteId: string) => call<boolean>("save_snapshot", { noteId }),
+  backupNow: (dir: string) => call<string>("backup_now", { dir }),
+  openBackups: () => call<void>("open_backups"),
+  storageInfo: () => call<StorageInfo>("storage_info"),
+  deleteUnusedResources: () => call<number>("delete_unused_resources"),
+  resolveConflict: (id: string, keep: "copy" | "original") => call<string>("resolve_conflict", { id, keep }),
+  clearHistory: (noteId: string) => call<number>("clear_history", { noteId }),
 
   listTags: () => call<TagInfo[]>("list_tags"),
   setNoteTags: (noteId: string, titles: string[]) => call<void>("set_note_tags", { noteId, titles }),
@@ -357,13 +374,18 @@ export const api = {
   refreshWidgets: () => call<void>("refresh_widgets"),
   applyWidgetActions: () => call<number>("apply_widget_actions"),
   setNotesOrder: (ids: string[]) => call<void>("set_notes_order", { ids }),
+  setNoteOrder: (id: string, order: number) => call<void>("set_note_order", { id, order }),
   listBacklinks: (noteId: string) => call<LinkedNote[]>("list_backlinks", { noteId }),
   saveAsTemplate: (noteId: string) => call<string>("save_as_template", { noteId }),
   listTemplates: () => call<LinkedNote[]>("list_templates"),
-  saveResource: (name: string, mime: string, data: number[]) => call<ResourceFile>("save_resource", { name, mime, data }),
+  /** The data goes as the raw body of the call (not as a list of numbers). */
+  saveResource: (name: string, mime: string, data: Uint8Array) =>
+    isTauri
+      ? invoke<ResourceFile>("save_resource_bytes", data, { headers: { "x-name": encodeURIComponent(name), "x-mime": mime } })
+      : call<ResourceFile>("save_resource", { name, mime, data: Array.from(data) }),
   resourceFiles: () => call<ResourceFile[]>("resource_files"),
   importResource: (path: string) => call<ResourceFile>("import_resource", { path }),
-  openResource: (id: string) => call<void>("open_resource", { id }),
+  openResource: (id: string, confirmed = false) => call<void>("open_resource", { id, confirmed }),
   clipUrl: (url: string, parentId: string | null) => call<Note>("clip_url", { url, parentId }),
 
   listComments: (noteId: string | null) => call<NoteComment[]>("list_comments", { noteId }),
@@ -406,6 +428,8 @@ export const api = {
   setCharacter: (noteId: string, character: Character) => call<void>("set_character", { noteId, character }),
   openPlot: (workId: string, template?: string) => call<{ noteId: string; plot: Plot }>("open_plot", { workId, template: template ?? null }),
   setPlot: (noteId: string, plot: Plot) => call<void>("set_plot", { noteId, plot }),
+  exportEpub: (workId: string, path: string, vertical: boolean, author?: string) =>
+    call<number>("export_epub", { workId, path, vertical, author: author ?? null }),
   workManuscript: (workId: string) => call<ManuscriptPart[]>("work_manuscript", { workId }),
   installKind: () => call<InstallKind>("install_kind"),
 };

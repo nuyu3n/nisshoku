@@ -1675,3 +1675,80 @@ button.tag-chip:hover {
 .add-input > .event-time-input {
   flex: none;
 }
+
+/* A conflict copy: settle it, and what differs from the original. */
+.notice.conflict-notice {
+  flex-direction: column;
+  align-items: stretch;
+}
+.conflict-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.conflict-diff {
+  margin-top: 10px;
+  max-height: 40vh;
+  overflow: auto;
+  border-radius: var(--radius-m);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 8px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.conflict-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 12px 6px;
+  font-size: 12px;
+}
+.conflict-diff .dl {
+  padding: 0 12px 0 28px;
+  text-indent: -16px;
+}
+.conflict-diff .mark {
+  display: inline-block;
+  width: 16px;
+  text-indent: 0;
+  opacity: 0.7;
+}
+.conflict-diff .dl.add,
+.conflict-legend .add {
+  background: color-mix(in srgb, #3a9a5b 16%, transparent);
+}
+.conflict-diff .dl.del,
+.conflict-legend .del {
+  background: color-mix(in srgb, #d0453a 14%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.conflict-diff .dl.same {
+  opacity: 0.65;
+}
+
+/* The reference panel: another note to read beside the text. */
+.reference-body p {
+  margin: 0 0 0.6em;
+  font-family: var(--editor-font, var(--font-serif));
+  line-height: 1.85;
+  font-size: 14px;
+}
+.reference-body .empty {
+  text-align: center;
+  line-height: 1.8;
+}
+.reference-body .empty .btn {
+  margin-top: 12px;
+}
+
+/* The notebook new tasks go to, beside the due date. */
+.folder-chip .folder-chip-name {
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

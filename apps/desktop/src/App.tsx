@@ -13,8 +13,8 @@ import { cancelDialog, DialogHost } from "./components/Dialogs";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AttachmentViewer } from "./components/Viewer";
 import { closeMenu, MenuHost, openMenu } from "./components/ContextMenu";
-import { inputMenu } from "./lib/actions";
-import { loadResources } from "./editor/images";
+import { flush, inputMenu } from "./lib/actions";
+import { loadResources, refreshImages } from "./editor/images";
 import { layoutFor } from "./store";
 import { isoDate } from "./api";
 import { isMobile, useBackButton, useSystemInsets } from "./lib/mobile";
@@ -327,8 +327,7 @@ export function App() {
       const { prefs, notes } = useStore.getState();
       if (prefs.startup === "diary") await s.openDiary(isoDate()).catch(report);
       else if (prefs.startup === "last" && prefs.lastNoteId && (await api.getNote(prefs.lastNoteId).then(() => true, () => false))) {
-        if (!notes.some((n) => n.id === prefs.lastNoteId)) await s.setScope({ kind: "all" });
-        s.select(prefs.lastNoteId);
+        await s.openNote(prefs.lastNoteId);
       } else if (prefs.startup !== "none" && notes.length > 0) s.select(notes[0].id);
       // Phones show one screen: the note opened above (select() went to the editor), or else the chosen one.
       if (useStore.getState().layout === "narrow") {
@@ -347,7 +346,17 @@ export function App() {
     })();
 
     if (!isTauri) return;
+    // Closing the window waits for the open note to be saved (the last
+    // keystrokes are still in the autosave delay).
+    const closing = isMobile
+      ? Promise.resolve(() => {})
+      : import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+          getCurrentWindow().onCloseRequested(async () => {
+            await Promise.race([flush().catch(() => {}), new Promise((r) => setTimeout(r, 5000))]);
+          }),
+        );
     const unlisteners = [
+      closing,
       listen<SyncStatus>("sync-status", (e) => {
         const prev = useStore.getState().syncStatus;
         useStore.getState().set({ syncStatus: e.payload });
@@ -359,6 +368,7 @@ export function App() {
         const s = useStore.getState();
         await s.refresh().catch(report);
         await loadResources();
+        refreshImages();
         // The open note may have been changed by another device.
         s.set({ remoteVersion: s.remoteVersion + 1 });
       }),

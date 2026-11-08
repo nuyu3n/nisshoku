@@ -14,6 +14,7 @@ pub mod models;
 pub mod raw;
 pub mod revisions;
 pub mod time;
+pub mod user_data;
 
 pub use db::{Database, DeletedItem};
 pub use error::{Error, Result};

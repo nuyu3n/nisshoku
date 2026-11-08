@@ -26,8 +26,11 @@ async function key(password: string, salt: Uint8Array): Promise<CryptoKey> {
   );
 }
 
+const BLOCK = /```nisshoku-lock\s*\nv1:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)\s*\n```/;
+
+/** Whether the body is a locked one (an actual encrypted block, not just the word). */
 export function isLocked(body: string): boolean {
-  return body.includes(MARK);
+  return body.includes(MARK) && BLOCK.test(body);
 }
 
 export async function lockBody(text: string, password: string, notice: string): Promise<string> {
@@ -40,7 +43,7 @@ export async function lockBody(text: string, password: string, notice: string): 
 
 /** The text of a locked body; throws if the password is wrong. */
 export async function unlockBody(body: string, password: string): Promise<string> {
-  const m = /```nisshoku-lock\s*\nv1:([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)\s*\n```/.exec(body);
+  const m = BLOCK.exec(body);
   if (!m) throw new Error("not a locked note");
   const k = await key(password, unb64(m[1]));
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(m[2]) as BufferSource }, k, unb64(m[3]) as BufferSource);

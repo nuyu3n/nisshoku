@@ -124,7 +124,7 @@ function NoteItem({ note, active, draggable: reorder, onReorder, index }: { note
             onChange={async (e) => {
               await api.setTodoCompleted(note.id, e.target.checked).catch(report);
               await useStore.getState().loadNotes();
-              useStore.getState().reloadNote();
+              useStore.getState().reloadNoteIf(note.id);
             }}
           />
         )}
@@ -331,9 +331,20 @@ export function NoteList() {
             active={n.id === selectedId}
             draggable={sort === "custom" && scope.kind === "folder"}
             onReorder={async (dragged, before) => {
-              const ids = notes.map((x) => x.id).filter((x) => x !== dragged);
-              ids.splice(ids.indexOf(before), 0, dragged);
-              await api.setNotesOrder(ids).catch(report);
+              const rest = notes.filter((x) => x.id !== dragged);
+              const at = rest.findIndex((x) => x.id === before);
+              // Between its new neighbours (higher order = higher up): only the
+              // dragged note changes. When they leave no room (equal orders, as
+              // notes from Joplin often have), the whole list is numbered again.
+              const above = rest[at - 1]?.order;
+              const below = rest[at].order;
+              const order = above === undefined ? below + 1000 : (above + below) / 2;
+              if (order > below && (above === undefined || order < above)) await api.setNoteOrder(dragged, order).catch(report);
+              else {
+                const ids = rest.map((x) => x.id);
+                ids.splice(at, 0, dragged);
+                await api.setNotesOrder(ids).catch(report);
+              }
               await useStore.getState().loadNotes();
             }}
           />

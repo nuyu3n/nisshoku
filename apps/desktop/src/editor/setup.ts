@@ -1,6 +1,6 @@
 // The editor's extensions, shared by the app and the self-test.
 
-import type { Extensions } from "@tiptap/core";
+import { Extension, InputRule, type Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { Focus, Placeholder } from "@tiptap/extensions";
@@ -32,8 +32,27 @@ export interface SetupOptions {
   onOpenCharacter?: (id: string) => void;
 }
 
+/** Typing `[[` asks for a note and links to it (as in many note apps). */
+const NoteLinkTrigger = Extension.create({
+  name: "noteLinkTrigger",
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\[\[$/,
+        handler: ({ state, range }) => {
+          if (state.selection.$from.parent.type.spec.code) return null;
+          state.tr.delete(range.from, range.to);
+          const editor = this.editor;
+          setTimeout(() => void import("./menus").then((m) => m.insertNoteLink(editor)), 0);
+        },
+      }),
+    ];
+  },
+});
+
 export function editorExtensions(o: SetupOptions = {}): Extensions {
   return [
+    NoteLinkTrigger,
     StarterKit.configure({
       paragraph: false,
       heading: { levels: [1, 2, 3, 4] },

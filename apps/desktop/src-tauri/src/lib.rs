@@ -5,12 +5,14 @@
 mod android;
 mod clip;
 mod diary;
+mod epub;
 mod features;
 mod files;
 mod i18n;
 mod notes;
 mod secrets;
 pub mod state;
+mod storage;
 mod sync;
 mod tasks;
 mod text;
@@ -55,6 +57,12 @@ pub fn handlers<R: tauri::Runtime>()
         notes::revision_content,
         notes::restore_revision,
         notes::save_snapshot,
+        notes::clear_history,
+        notes::resolve_conflict,
+        storage::backup_now,
+        storage::open_backups,
+        storage::storage_info,
+        storage::delete_unused_resources,
         features::list_tags,
         features::set_note_tags,
         features::rename_tag,
@@ -63,10 +71,12 @@ pub fn handlers<R: tauri::Runtime>()
         features::set_note_todo,
         features::set_todo_completed,
         features::set_notes_order,
+        features::set_note_order,
         features::list_backlinks,
         features::save_as_template,
         features::list_templates,
         features::save_resource,
+        features::save_resource_bytes,
         features::resource_files,
         features::import_resource,
         features::open_resource,
@@ -114,6 +124,7 @@ pub fn handlers<R: tauri::Runtime>()
         works::open_plot,
         works::set_plot,
         works::work_manuscript,
+        epub::export_epub,
     ]
 }
 
@@ -167,6 +178,16 @@ pub fn run() {
     let builder = tauri::Builder::default();
     // New versions are installed by the updater plugin on desktop; Android
     // checks the releases itself (`updates::latest_release`).
+    // One window over the profile: a second launch brings the first to the
+    // front (two would overwrite each other's edits and sync at once).
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }));
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -176,6 +197,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // `NISSHOKU_PROFILE` puts the notes elsewhere (to try things out, or
             // to carry the app on a drive).
@@ -192,6 +214,14 @@ pub fn run() {
             secrets::init(&profile);
             std::fs::create_dir_all(&profile)?;
             app.manage(make_state(&profile)?);
+            // Attachments are shown from the profile's resources, wherever
+            // the profile is (the configured scope covers the default one).
+            if let Err(e) = app
+                .asset_protocol_scope()
+                .allow_directory(profile.join("resources"), true)
+            {
+                tracing::warn!("could not allow the resource folder: {e}");
+            }
 
             // Old trash, then background syncs at the interval of the preferences.
             {
@@ -204,10 +234,15 @@ pub fn run() {
                 if let Err(e) = notes::purge_trash(&db, days) {
                     tracing::warn!("could not empty old trash: {e}");
                 }
+                if let Err(e) = storage::daily_backup(&db, &state.data_dir) {
+                    tracing::warn!("could not back up the database: {e}");
+                }
             }
             show_main_window(app);
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(sync::background(handle));
+            tauri::async_runtime::spawn(notes::keep_history(app.handle().clone()));
+            tauri::async_runtime::spawn(tasks::remind_due(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(handlers())

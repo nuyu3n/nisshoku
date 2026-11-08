@@ -90,17 +90,12 @@ pub fn diary_entries(
     query: Option<String>,
 ) -> CmdResult<Vec<DiaryEntry>> {
     let all = entries(&state.db())?;
-    let terms: Vec<String> = query
-        .unwrap_or_default()
-        .split_whitespace()
-        .map(str::to_lowercase)
-        .collect();
+    let query = query.unwrap_or_default();
     Ok(all
         .into_iter()
         .filter(|(e, body)| {
             let events: Vec<&str> = e.events.iter().map(|x| x.text.as_str()).collect();
-            let hay = format!("{}\n{}\n{}", e.title, body, events.join("\n")).to_lowercase();
-            terms.iter().all(|t| hay.contains(t))
+            crate::text::matches_query(&format!("{}\n{}\n{}", e.title, body, events.join("\n")), &query)
         })
         .map(|(e, _)| e)
         .collect())
@@ -132,7 +127,7 @@ pub fn set_diary_meta(
     let value = |v: Option<String>| v.filter(|s| !s.is_empty()).map(|s| json!(s));
     n.user_data = userdata::set(&n.user_data, "mood", value(mood));
     n.user_data = userdata::set(&n.user_data, "weather", value(weather));
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[derive(Serialize)]
@@ -252,7 +247,7 @@ pub fn set_diary_events(
     events.sort_by(|a, b| a.time.cmp(&b.time));
     let value = (!events.is_empty()).then(|| serde_json::to_value(&events).expect("serializable"));
     n.user_data = userdata::set(&n.user_data, "events", value);
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 // -------------------------------------------------------------------------
@@ -295,32 +290,60 @@ fn memo_note(db: &Database) -> CmdResult<Note> {
     Ok(n)
 }
 
+/// A list line of the memo: its indentation and item (text may be empty).
+fn memo_line(line: &str) -> Option<(&str, MemoItem)> {
+    let rest = line.trim_start();
+    let indent = &line[..line.len() - rest.len()];
+    let rest = rest.strip_prefix("- ").or_else(|| rest.strip_prefix("* "))?;
+    let (done, text) = if let Some(t) = rest.strip_prefix("[ ]") {
+        (false, t)
+    } else if let Some(t) = rest.strip_prefix("[x]").or_else(|| rest.strip_prefix("[X]")) {
+        (true, t)
+    } else {
+        (false, rest)
+    };
+    Some((
+        indent,
+        MemoItem {
+            text: text.trim().to_string(),
+            done,
+        },
+    ))
+}
+
 fn parse_memo(body: &str) -> Vec<MemoItem> {
     body.lines()
-        .filter_map(|l| {
-            let l = l.trim_start();
-            if let Some(t) = l.strip_prefix("- [ ] ") {
-                Some(MemoItem {
-                    text: t.to_string(),
-                    done: false,
-                })
-            } else if let Some(t) = l
-                .strip_prefix("- [x] ")
-                .or_else(|| l.strip_prefix("- [X] "))
-            {
-                Some(MemoItem {
-                    text: t.to_string(),
-                    done: true,
-                })
-            } else {
-                l.strip_prefix("- ").map(|t| MemoItem {
-                    text: t.to_string(),
-                    done: false,
-                })
-            }
-        })
-        .filter(|i| !i.text.trim().is_empty())
+        .filter_map(|l| memo_line(l).map(|(_, i)| i))
+        .filter(|i| !i.text.is_empty())
         .collect()
+}
+
+/// The memo's body with its items replaced by `items`, in place: other lines
+/// (headings, paragraphs written in the editor) and indentation stay.
+fn write_memo(body: &str, items: &[MemoItem]) -> String {
+    let format = |indent: &str, i: &MemoItem| {
+        format!("{indent}- [{}] {}", if i.done { "x" } else { " " }, i.text.trim().replace('\n', " "))
+    };
+    let items: Vec<&MemoItem> = items.iter().filter(|i| !i.text.trim().is_empty()).collect();
+    let mut next = items.iter();
+    let mut out: Vec<String> = Vec::new();
+    let mut last_item = None;
+    for line in body.lines() {
+        match memo_line(line) {
+            Some((_, old)) if old.text.is_empty() => {} // an empty item: dropped
+            Some((indent, _)) => {
+                if let Some(i) = next.next() {
+                    out.push(format(indent, i));
+                    last_item = Some(out.len());
+                }
+            }
+            None => out.push(line.to_string()),
+        }
+    }
+    let rest: Vec<String> = next.map(|i| format("", i)).collect();
+    let at = last_item.unwrap_or(out.len());
+    out.splice(at..at, rest);
+    out.join("\n")
 }
 
 #[tauri::command]
@@ -337,18 +360,7 @@ pub fn get_diary_memo(state: State<'_, AppState>) -> CmdResult<Memo> {
 pub fn set_diary_memo(state: State<'_, AppState>, items: Vec<MemoItem>) -> CmdResult<()> {
     let db = state.db();
     let mut n = memo_note(&db)?;
-    n.body = items
-        .iter()
-        .filter(|i| !i.text.trim().is_empty())
-        .map(|i| {
-            format!(
-                "- [{}] {}",
-                if i.done { "x" } else { " " },
-                i.text.trim().replace('\n', " ")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    n.body = write_memo(&n.body, &items);
     db.save(&mut n).map_err(err)
 }
 
@@ -374,7 +386,8 @@ pub(crate) fn merge_duplicates(db: &Database) -> CmdResult<bool> {
             .map_err(err)?
         {
             n.parent_id = main.id.clone();
-            db.save(&mut n).map_err(err)?;
+            db.save_meta(&mut n).map_err(err)?;
+            changed = true;
         }
         let children = db
             .query::<nisshoku_core::Folder, _>("parent_id = ?1", [&extra.id])
@@ -382,8 +395,10 @@ pub(crate) fn merge_duplicates(db: &Database) -> CmdResult<bool> {
         if children.is_empty() {
             db.delete(nisshoku_core::ItemType::Folder, &extra.id)
                 .map_err(err)?;
+            changed = true;
         }
-        changed = true;
+        // (A notebook with notebooks inside is kept, and not counted as a
+        // change every time: that would sync again after every sync.)
     }
 
     let template = crate::notes::preferences(db)
@@ -402,10 +417,12 @@ pub(crate) fn merge_duplicates(db: &Database) -> CmdResult<bool> {
         |n: &Note| userdata::get(&n.user_data, "memo").and_then(|v| v.as_bool()) == Some(true);
     let mut groups: BTreeMap<String, Vec<Note>> = BTreeMap::new();
     for n in notes {
+        // Only entries the app made for a day (with their recorded date):
+        // notes whose title merely starts with a date are the user's own.
         let key = if is_memo(&n) {
             Some("memo".to_string())
         } else {
-            diary_date(&n)
+            userdata::get(&n.user_data, "diaryDate").and_then(|v| v.as_str().map(str::to_string))
         };
         if let Some(key) = key {
             groups.entry(key).or_default().push(n);
@@ -494,6 +511,34 @@ mod tests {
         n.user_data = userdata::set("", "diaryDate", Some(json!(date)));
         db.save(&mut n).unwrap();
         n
+    }
+
+    #[test]
+    fn the_memo_keeps_what_else_was_written() {
+        let body = "# 買うもの
+
+- [ ] 牛乳
+  - [x] 卵
+- [ ]
+
+メモ書き";
+        assert_eq!(parse_memo(body).len(), 2);
+        let items = vec![
+            MemoItem { text: "牛乳".into(), done: true },
+            MemoItem { text: "卵".into(), done: true },
+            MemoItem { text: "パン".into(), done: false },
+        ];
+        assert_eq!(
+            write_memo(body, &items),
+            "# 買うもの
+
+- [x] 牛乳
+  - [x] 卵
+- [ ] パン
+
+メモ書き"
+        );
+        assert_eq!(write_memo("", &items[..1]), "- [x] 牛乳");
     }
 
     #[test]

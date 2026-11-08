@@ -23,11 +23,12 @@ import { writeText } from "../lib/clipboard";
 import { Icon } from "./Icon";
 import { peekButtonProps, pinSidebar } from "../lib/peek";
 import { dialogs } from "./Dialogs";
-import { CommentsPanel, HistoryPanel, OutlinePanel, PreviewPanel, ProofPanel } from "./Panels";
+import { CommentsPanel, HistoryPanel, OutlinePanel, PreviewPanel, ProofPanel, ReferencePanel } from "./Panels";
 import { insertFiles, isAttachment, openAttachment, resourcesReady } from "../editor/images";
 import { tsvToTable } from "../editor/table";
 import { isLocked, lockBody, unlockBody } from "../lib/lock";
 import { TablePicker } from "./TablePicker";
+import { ConflictBar } from "./Conflict";
 import { DiaryHeader, DiaryText } from "./Diary";
 import { WindowControls } from "./Chrome";
 import { DueChip } from "./Tasks";
@@ -42,6 +43,8 @@ import { noteOpened, roleLabel, useNoteWork, workIdOf } from "../lib/works";
 import { refreshCharacterNames, type CharacterName } from "../editor/characters";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
+
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export function EditorPane() {
   const t = useT();
@@ -109,7 +112,12 @@ export function EditorPane() {
     return editorRef.current ? editorMarkdown(editorRef.current) : "";
   }, []);
 
-  const flush = useCallback(async () => {
+  /** The title and body (as stored, encrypted if locked) the edits started from. */
+  const baseRef = useRef<{ title: string; body: string } | null>(null);
+  /** The save running, so that saves happen one after another. */
+  const saving = useRef<Promise<void>>(Promise.resolve());
+
+  const flushNow = useCallback(async () => {
     window.clearTimeout(saveTimer.current);
     const n = noteRef.current;
     if (!n || n.deletedTime > 0) return;
@@ -117,20 +125,30 @@ export function EditorPane() {
     const plain = currentBody();
     const title = titleRef.current;
     if (lastSaved.current && lastSaved.current.title === title && lastSaved.current.body === plain) {
-      setSaveState("saved");
+      if (noteRef.current?.id === n.id) setSaveState("saved");
       return;
     }
     setSaveState("saving");
     try {
       const password = passwords.get(n.id);
       const body = password ? await lockBody(plain, password, t("lock.notice")) : plain;
-      const summary = await api.saveNote(n.id, title, body);
+      const summary = await api.saveNote(n.id, title, body, baseRef.current ?? undefined);
       lastSaved.current = { title, body: plain };
       if (noteRef.current?.id === n.id) {
+        baseRef.current = { title, body };
         noteRef.current = { ...noteRef.current, updatedTime: summary.updatedTime };
-        setSaveState("saved");
+        // Typing during the save left it dirty, with its own save scheduled.
+        const current = currentBody();
+        setSaveState(titleRef.current === title && current === plain ? "saved" : "dirty");
       }
       useStore.getState().updateSummary(summary);
+      if (summary.conflictId) {
+        void useStore.getState().refresh();
+        useStore.getState().toast(t("editor.keptConflict"), {
+          label: t("editor.showConflict"),
+          run: () => void useStore.getState().setScope({ kind: "conflicts" }),
+        });
+      }
       void useStore.getState().loadStats();
       if (prefsRef.current.syncAfterEdit) requestSync();
     } catch (e) {
@@ -138,6 +156,12 @@ export function EditorPane() {
       report(e);
     }
   }, [currentBody]);
+
+  const flush = useCallback(() => {
+    const next = saving.current.then(flushNow, flushNow);
+    saving.current = next.catch(() => {});
+    return next;
+  }, [flushNow]);
 
   useEffect(() => registerFlush(flush), [flush]);
 
@@ -319,6 +343,7 @@ export function EditorPane() {
       lockedRef.current = stillLocked;
       if (stillLocked) body = "";
       lastSaved.current = { title: n.title, body };
+      baseRef.current = { title: n.title, body: n.body };
       editor.commands.setContent(body, { contentType: "markdown", emitUpdate: false });
       // Content the editor can't represent (raw HTML, unusual Markdown) is
       // edited as Markdown, so that it is not altered.
@@ -330,7 +355,10 @@ export function EditorPane() {
       setLossy(isLossy);
       sourceRef.current = isLossy || isDiary ? body : null;
       setSource(sourceRef.current);
-      editor.commands.setSearch("");
+      // Opened from a search: its first word is marked in the text.
+      const scope = useStore.getState().scope;
+      const word = scope.kind === "search" ? scope.query.split(/\s+/).find((w) => w && !/^(tag|in|タグ|場所):/i.test(w)) : undefined;
+      editor.commands.setSearch(word ?? "");
       loading.current = false;
       setSaveState("saved");
       updateCounts();
@@ -362,6 +390,7 @@ export function EditorPane() {
         const freshBody = password && isLocked(fresh.body) ? await unlockBody(fresh.body, password).catch(() => fresh.body) : fresh.body;
         if (fresh.title === lastSaved.current?.title && freshBody === lastSaved.current?.body) {
           noteRef.current = { ...n, updatedTime: fresh.updatedTime };
+          baseRef.current = { title: fresh.title, body: fresh.body };
           return;
         }
         if (saveStateRef.current === "saved") useStore.getState().reloadNote();
@@ -558,7 +587,7 @@ export function EditorPane() {
     else if (format === "txt") contents = `${titleRef.current}\n\n${markdownToPlain(body)}\n`;
     else {
       const html = (editor?.getHTML() ?? "").replace(/>([^<]+)</g, (_, s: string) => `>${rubyToHtml(s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"))}<`);
-      contents = `<!doctype html><html lang="${prefs.language}"><head><meta charset="utf-8"><title>${titleRef.current}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.10/dist/katex.min.css"><style>body{max-width:40em;margin:3em auto;padding:0 1em;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;line-height:1.9;color:#2c2a26;background:#faf9f5}h1,h2,h3{line-height:1.5}blockquote{border-left:3px solid #e9b89c;margin-left:0;padding-left:1em;color:#69645b}table{border-collapse:collapse}td,th{border:1px solid #d6d0c3;padding:.3em .6em}hr{border:none;text-align:center}hr::after{content:"＊　＊　＊"}</style></head><body><h1>${titleRef.current}</h1>${html}</body></html>`;
+      contents = `<!doctype html><html lang="${prefs.language}"><head><meta charset="utf-8"><title>${escapeHtml(titleRef.current)}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.10/dist/katex.min.css"><style>body{max-width:40em;margin:3em auto;padding:0 1em;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;line-height:1.9;color:#2c2a26;background:#faf9f5}h1,h2,h3{line-height:1.5}blockquote{border-left:3px solid #e9b89c;margin-left:0;padding-left:1em;color:#69645b}table{border-collapse:collapse}td,th{border:1px solid #d6d0c3;padding:.3em .6em}hr{border:none;text-align:center}hr::after{content:"＊　＊　＊"}</style></head><body><h1>${escapeHtml(titleRef.current)}</h1>${html}</body></html>`;
     }
     await api.writeTextFile(path, contents).catch(report);
     useStore.getState().toast(t("toast.exported"));
@@ -572,7 +601,7 @@ export function EditorPane() {
       message: t("goal.message"),
     });
     if (v === null) return;
-    const goal = parseInt(v.replace(/[,，]/g, ""), 10);
+    const goal = parseInt(v.normalize("NFKC").replace(/[,\s]/g, ""), 10);
     await api.setNoteGoal(note.id, Number.isFinite(goal) && goal > 0 ? goal : null).catch(report);
     setNote({ ...note, goal: Number.isFinite(goal) && goal > 0 ? goal : null });
     void useStore.getState().loadNotes();
@@ -584,7 +613,7 @@ export function EditorPane() {
     // Also when the editor is too narrow for the panel buttons (CSS hides them).
     const panelButtons = document.querySelector<HTMLElement>(".editor-top .panel-btn");
     const narrow = layout === "narrow" || (!!panelButtons && panelButtons.offsetParent === null);
-    const panelItem = (id: "outline" | "preview" | "history" | "comments" | "proof", icon: string, label: string): MenuItem => ({
+    const panelItem = (id: "outline" | "preview" | "history" | "comments" | "proof" | "reference", icon: string, label: string): MenuItem => ({
       label,
       icon,
       checked: panel === id,
@@ -598,6 +627,7 @@ export function EditorPane() {
             panelItem("history", "history", t("editor.history")),
             ...(note.kind ? [] : [panelItem("preview", "vertical", t("editor.preview"))]),
             panelItem("proof", "proof", t("editor.proof")),
+            panelItem("reference", "memo", t("reference.title")),
             "sep",
           ] as MenuItem[])
         : []),
@@ -653,6 +683,9 @@ export function EditorPane() {
               passwords.set(note.id, pw);
               lastSaved.current = null;
               await flush();
+              // The history holds the text from before the lock: remove it
+              // (here and, through the sync, on the target).
+              await api.clearHistory(note.id).catch(report);
               s.toast(t("lock.done"));
             } },
       ...(passwords.has(note.id)
@@ -708,7 +741,7 @@ export function EditorPane() {
     );
   }
 
-  const panelButton = (id: "outline" | "preview" | "history" | "comments" | "proof", icon: string, label: string, badge = false) => (
+  const panelButton = (id: "outline" | "preview" | "history" | "comments" | "proof" | "reference", icon: string, label: string, badge = false) => (
     <button className={`icon-btn hide-narrow panel-btn${panel === id ? " active" : ""}`} title={label} onClick={() => useStore.getState().set({ panel: panel === id ? "none" : id })}>
       <Icon name={icon} />
       {badge && <span className="dot" />}
@@ -752,6 +785,7 @@ export function EditorPane() {
         {panelButton("history", "history", t("editor.history"))}
         {!note.kind && panelButton("preview", "vertical", t("editor.preview"))}
         {!diary && panelButton("proof", "proof", t("editor.proof"))}
+        {panelButton("reference", "memo", t("reference.title"))}
         <ViewButton />
         <button className="icon-btn" title={t("editor.more")} onClick={(e) => openMenu(e.currentTarget, moreMenu())}>
           <Icon name="more" />
@@ -778,12 +812,7 @@ export function EditorPane() {
                 </button>
               </div>
             )}
-            {note.isConflict && (
-              <div className="notice">
-                <Icon name="conflict" />
-                <span className="grow">{t("editor.conflictNotice")}</span>
-              </div>
-            )}
+            {note.isConflict && <ConflictBar note={note} onDone={(id) => useStore.getState().select(id)} />}
             {lossy && source !== null && (
               <div className="notice">
                 <Icon name="alert" />
@@ -937,6 +966,7 @@ export function EditorPane() {
         {panel === "history" && <HistoryPanel noteId={note.id} currentBody={currentBody} onBeforeRestore={flush} />}
         {panel === "preview" && !note.kind && <PreviewPanel title={title} paragraphs={counts.paragraphs} editor={source === null ? editor : null} />}
         {panel === "proof" && source === null && <ProofPanel editor={editor} />}
+        {panel === "reference" && <ReferencePanel currentId={note.id} />}
         {panel === "comments" && (
           <CommentsPanel
             editor={source === null ? editor : null}
@@ -1002,13 +1032,7 @@ function LockScreen({ onUnlock }: { onUnlock: (password: string) => Promise<bool
 
 /** Opens a linked note, switching to a list that has it. */
 async function openLinkedNote(id: string) {
-  const s = useStore.getState();
-  if (!s.notes.some((n) => n.id === id)) {
-    const n = await api.getNote(id).catch(report);
-    if (!n) return;
-    await s.setScope({ kind: "folder", id: n.parentId });
-  }
-  useStore.getState().select(id);
+  if (!(await useStore.getState().openNote(id))) useStore.getState().toast(t("links.missing"));
 }
 
 /** Back (on phones) and buttons to bring back the sidebar and the note list. */

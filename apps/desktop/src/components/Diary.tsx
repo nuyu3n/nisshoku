@@ -107,9 +107,13 @@ function MemoCard() {
   const [items, setItems] = useState<MemoItem[] | null>(null);
   const [draft, setDraft] = useState("");
   const [open, setOpen] = useState(true);
+  // Again after a sync or an edit of the memo note: changes are made on the
+  // current items, not ones read before.
+  const remoteVersion = useStore((s) => s.remoteVersion);
+  const noteVersion = useStore((s) => s.noteVersion);
   useEffect(() => {
     api.getDiaryMemo().then((m) => setItems(m.items), report);
-  }, []);
+  }, [remoteVersion, noteVersion]);
   const save = (next: MemoItem[]) => {
     setItems(next);
     void api.setDiaryMemo(next).catch(report);
@@ -393,6 +397,7 @@ function nowTime() {
 }
 
 export function DiaryHeader({ noteId, date, readOnly }: { noteId: string; date: string; readOnly: boolean }) {
+  const remoteVersion = useStore((s) => s.remoteVersion);
   const [meta, setMeta] = useState<{ mood: string | null; weather: string | null; events: DiaryEvent[] }>({ mood: null, weather: null, events: [] });
   const [eventText, setEventText] = useState("");
   const [eventTime, setEventTime] = useState(nowTime());
@@ -401,7 +406,7 @@ export function DiaryHeader({ noteId, date, readOnly }: { noteId: string; date: 
       const e = list.find((x) => x.noteId === noteId);
       setMeta({ mood: moodOf(e?.mood)?.key ?? null, weather: weatherOf(e?.weather)?.key ?? null, events: e?.events ?? [] });
     }, report);
-  }, [noteId]);
+  }, [noteId, remoteVersion]);
 
   const saveMeta = async (patch: { mood?: string | null; weather?: string | null }) => {
     const next = { ...meta, ...patch };

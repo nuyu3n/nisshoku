@@ -68,6 +68,10 @@ pub struct NoteSummary {
     tags: Vec<String>,
     /// In a work: `character`, `plot`, `material`, or none (manuscript).
     kind: Option<String>,
+    /// Set by `save_note` when the note had been changed elsewhere since the
+    /// editor loaded it: that version was kept as this conflict copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    conflict_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -80,6 +84,8 @@ pub struct NoteDto {
     created_time: i64,
     updated_time: i64,
     is_conflict: bool,
+    /// For a conflict copy, the note it is a copy of.
+    conflict_original_id: String,
     deleted_time: i64,
     diary_date: Option<String>,
     goal: Option<i64>,
@@ -143,6 +149,7 @@ pub(crate) fn summary(n: &Note) -> NoteSummary {
         order: n.order,
         tags: Vec::new(),
         kind: crate::works::kind_of(n),
+        conflict_id: None,
     }
 }
 
@@ -163,6 +170,7 @@ pub(crate) fn dto(n: &Note) -> NoteDto {
         created_time: n.user_created_time.max(n.created_time),
         updated_time: n.user_updated_time.max(n.updated_time),
         is_conflict: n.is_conflict != 0,
+        conflict_original_id: n.conflict_original_id.clone(),
         deleted_time: n.deleted_time,
         diary_date: diary_date(n),
         goal: goal(n),
@@ -262,15 +270,20 @@ pub fn set_folder_icon(
         Some(e) => json!({ "emoji": e.trim(), "name": "", "dataUrl": "", "type": 1 }).to_string(),
         None => String::new(),
     };
-    db.save(&mut f).map_err(err)
+    db.save_meta(&mut f).map_err(err)
 }
 
 #[tauri::command]
 pub fn move_folder(state: State<'_, AppState>, id: String, parent_id: String) -> CmdResult<()> {
     let db = state.db();
     // A folder cannot go inside itself.
+    if !parent_id.is_empty() {
+        load_folder(&db, &parent_id)?;
+    }
     let mut p = parent_id.clone();
-    while !p.is_empty() {
+    let mut seen = std::collections::HashSet::new();
+    // (`seen` ends a loop already in the data, which would otherwise hang here.)
+    while !p.is_empty() && seen.insert(p.clone()) {
         if p == id {
             return Err(tr(
                 "ノートブックをその中のノートブックには移動できません",
@@ -286,7 +299,7 @@ pub fn move_folder(state: State<'_, AppState>, id: String, parent_id: String) ->
     }
     let mut f = load_folder(&db, &id)?;
     f.parent_id = parent_id;
-    db.save(&mut f).map_err(err)
+    db.save_meta(&mut f).map_err(err)
 }
 
 /// Moves a notebook, its sub-notebooks and their notes to the trash.
@@ -302,7 +315,7 @@ pub fn trash_folder(state: State<'_, AppState>, id: String) -> CmdResult<()> {
         {
             let mut n = n;
             n.deleted_time = now;
-            db.save(&mut n).map_err(err)?;
+            db.save_meta(&mut n).map_err(err)?;
         }
         for f in db
             .query::<Folder, _>("parent_id = ?1 AND deleted_time = 0", [&fid])
@@ -312,7 +325,7 @@ pub fn trash_folder(state: State<'_, AppState>, id: String) -> CmdResult<()> {
         }
         let mut f = load_folder(&db, &fid)?;
         f.deleted_time = now;
-        db.save(&mut f).map_err(err)?;
+        db.save_meta(&mut f).map_err(err)?;
     }
     Ok(())
 }
@@ -357,11 +370,11 @@ pub fn list_notes(state: State<'_, AppState>, scope: NoteScope) -> CmdResult<Vec
                 .map(|nt| nt.note_id)
                 .collect();
             db.query::<Note, _>("deleted_time = 0 AND is_conflict = 0", [])
-                .map(|v| v.into_iter().filter(|n| ids.contains(&n.id)).collect())
+                .map(|v| v.into_iter().filter(|n| ids.contains(&n.id) && !is_template(n)).collect())
         }
         NoteScope::Pinned => db
             .query::<Note, _>("deleted_time = 0 AND is_conflict = 0", [])
-            .map(|v| v.into_iter().filter(is_pinned).collect()),
+            .map(|v| v.into_iter().filter(|n| is_pinned(n) && !is_template(n)).collect()),
         NoteScope::Todo => {
             db.query::<Note, _>("deleted_time = 0 AND is_conflict = 0 AND is_todo = 1", [])
         }
@@ -386,13 +399,39 @@ pub fn list_notes(state: State<'_, AppState>, scope: NoteScope) -> CmdResult<Vec
         NoteScope::Trash => db.query::<Note, _>("deleted_time > 0", []),
         NoteScope::Conflicts => db.query::<Note, _>("is_conflict = 1 AND deleted_time = 0", []),
         NoteScope::Search { query } => {
-            let terms: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
+            // `tag:名前` and `in:ノートブック` narrow down; other words are searched for.
+            use crate::text::{matches_query, search_fold};
+            let mut words = Vec::new();
+            let (mut tag_terms, mut folder_terms) = (Vec::new(), Vec::new());
+            for w in query.split_whitespace() {
+                let lower = w.to_lowercase();
+                if let Some(t) = lower.strip_prefix("tag:").or_else(|| w.strip_prefix("タグ:")) {
+                    tag_terms.push(search_fold(t));
+                } else if let Some(f) = lower.strip_prefix("in:").or_else(|| w.strip_prefix("場所:")) {
+                    folder_terms.push(search_fold(f));
+                } else {
+                    words.push(w);
+                }
+            }
+            let words = words.join(" ");
+            if words.trim().is_empty() && tag_terms.is_empty() && folder_terms.is_empty() {
+                return Ok(Vec::new());
+            }
+            let tags = crate::features::tag_titles_by_note(&db)?;
+            let folders: HashMap<String, String> = db
+                .all::<Folder>()
+                .map_err(err)?
+                .into_iter()
+                .map(|f| (f.id, search_fold(&f.title)))
+                .collect();
             let all = db.query::<Note, _>("deleted_time = 0", []).map_err(err)?;
             Ok(all
                 .into_iter()
                 .filter(|n| {
-                    let hay = format!("{}\n{}", n.title, n.body).to_lowercase();
-                    terms.iter().all(|t| hay.contains(t))
+                    let note_tags: Vec<String> = tags.get(&n.id).map(|v| v.iter().map(|t| search_fold(t)).collect()).unwrap_or_default();
+                    tag_terms.iter().all(|t| note_tags.iter().any(|x| x.contains(t.as_str())))
+                        && folder_terms.iter().all(|f| folders.get(&n.parent_id).is_some_and(|x| x.contains(f.as_str())))
+                        && matches_query(&format!("{}\n{}", n.title, n.body), &words)
                 })
                 .collect())
         }
@@ -465,18 +504,39 @@ pub fn create_note(
 
 /// Saves the title and body of a note (with the history rules), and counts
 /// what was written toward today's statistics.
+///
+/// `base_title` / `base_body` are the text the editor started from. If the
+/// note now holds another text (a sync brought an edit made on another
+/// device meanwhile), that version is kept as a conflict copy rather than
+/// overwritten unseen.
 #[tauri::command]
 pub fn save_note(
     state: State<'_, AppState>,
     id: String,
     title: String,
     body: String,
+    base_title: Option<String>,
+    base_body: Option<String>,
 ) -> CmdResult<NoteSummary> {
     let db = state.db();
     let mut n = load_note(&db, &id)?;
     if n.title == title && n.body == body {
         return Ok(summary(&n));
     }
+    let changed_elsewhere = match (&base_title, &base_body) {
+        (Some(t), Some(b)) => (&n.title, &n.body) != (t, b),
+        _ => false,
+    };
+    let conflict_id = if changed_elsewhere && n.deleted_time == 0 {
+        let mut copy = n.clone();
+        copy.id = String::new();
+        copy.is_conflict = 1;
+        copy.conflict_original_id = n.id.clone();
+        db.save(&mut copy).map_err(err)?;
+        Some(copy.id)
+    } else {
+        None
+    };
     let before = count_chars(&n.body);
     n.title = title;
     n.body = body;
@@ -485,7 +545,9 @@ pub fn save_note(
     if after > before {
         record_written(&db, (after - before) as i64)?;
     }
-    Ok(summary(&n))
+    let mut out = summary(&n);
+    out.conflict_id = conflict_id;
+    Ok(out)
 }
 
 #[tauri::command]
@@ -494,7 +556,7 @@ pub fn move_note(state: State<'_, AppState>, id: String, parent_id: String) -> C
     load_folder(&db, &parent_id)?;
     let mut n = load_note(&db, &id)?;
     n.parent_id = parent_id;
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -506,7 +568,7 @@ pub fn set_note_goal(state: State<'_, AppState>, id: String, goal: Option<i64>) 
         GOAL_KEY,
         goal.filter(|g| *g > 0).map(|g| json!(g)),
     );
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -518,7 +580,29 @@ pub fn duplicate_note(state: State<'_, AppState>, id: String) -> CmdResult<NoteD
         &format!("{}{}", src.title, tr("（コピー）", " (copy)")),
         &src.body,
     );
+    // What the note is (a to-do, a chapter or character of a work, its goal…)
+    // comes along; comments on the original and its day in the diary do not.
+    n.is_todo = src.is_todo;
+    n.todo_due = src.todo_due;
+    let mut user_data = src.user_data.clone();
+    for key in [COMMENTS_KEY, DIARY_DATE_KEY, "pinned", "memo"] {
+        if userdata::get(&user_data, key).is_some() {
+            user_data = userdata::set(&user_data, key, None);
+        }
+    }
+    n.user_data = user_data;
     db.save(&mut n).map_err(err)?;
+    for nt in db
+        .query::<nisshoku_core::NoteTag, _>("note_id = ?1", [&src.id])
+        .map_err(err)?
+    {
+        let mut link = nisshoku_core::NoteTag {
+            note_id: n.id.clone(),
+            tag_id: nt.tag_id,
+            ..Default::default()
+        };
+        db.save(&mut link).map_err(err)?;
+    }
     Ok(dto(&n))
 }
 
@@ -530,7 +614,7 @@ pub fn trash_note(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let db = state.db();
     let mut n = load_note(&db, &id)?;
     n.deleted_time = now_ms();
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -544,7 +628,7 @@ pub fn restore_note(state: State<'_, AppState>, id: String) -> CmdResult<()> {
             Some(mut f) => {
                 if f.deleted_time != 0 {
                     f.deleted_time = 0;
-                    db.save(&mut f).map_err(err)?;
+                    db.save_meta(&mut f).map_err(err)?;
                 }
                 parent = f.parent_id.clone();
             }
@@ -555,7 +639,7 @@ pub fn restore_note(state: State<'_, AppState>, id: String) -> CmdResult<()> {
         }
     }
     n.deleted_time = 0;
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -619,17 +703,24 @@ fn file_name(title: &str, fallback: &str) -> String {
         .collect();
     let cleaned = cleaned.trim().trim_end_matches('.').to_string();
     let short: String = cleaned.chars().take(80).collect();
+    let short = short.trim_end_matches([' ', '.']).to_string();
     if short.is_empty() {
-        fallback.to_string()
-    } else {
-        short
+        return fallback.to_string();
     }
+    // Names Windows keeps for devices, with or without an extension.
+    let stem = short.split('.').next().unwrap_or("").trim().to_ascii_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit());
+    if reserved { format!("{short}_") } else { short }
 }
 
 /// Writes every note as a Markdown file, in folders named after the
 /// notebooks. Returns the number of notes written.
 #[tauri::command]
 pub fn export_all(state: State<'_, AppState>, dir: String) -> CmdResult<usize> {
+    let state = &*state;
     let db = state.db();
     let folders: HashMap<String, Folder> = db
         .query::<Folder, _>("deleted_time = 0", [])
@@ -654,24 +745,85 @@ pub fn export_all(state: State<'_, AppState>, dir: String) -> CmdResult<usize> {
     let notes = db
         .query::<Note, _>("deleted_time = 0 AND is_conflict = 0", [])
         .map_err(err)?;
+    let resources: HashMap<String, nisshoku_core::Resource> = db
+        .all::<nisshoku_core::Resource>()
+        .map_err(err)?
+        .into_iter()
+        .map(|r| (r.id.clone(), r))
+        .collect();
+    let link = regex_lite_links();
+    let mut written = 0;
+    let mut failed = Vec::new();
+    let mut copied = std::collections::HashSet::new();
     for n in &notes {
-        let folder = root.join(folder_path(&n.parent_id));
-        std::fs::create_dir_all(&folder).map_err(err)?;
-        let base = file_name(&n.title, "Untitled");
-        let mut path = folder.join(format!("{base}.md"));
-        let mut i = 2;
-        while !used.insert(path.clone()) || path.exists() {
-            path = folder.join(format!("{base} ({i}).md"));
-            i += 1;
+        let result = (|| -> std::io::Result<()> {
+            let rel = folder_path(&n.parent_id);
+            let folder = root.join(&rel);
+            std::fs::create_dir_all(&folder)?;
+            let base = file_name(&n.title, "Untitled");
+            let mut path = folder.join(format!("{base}.md"));
+            let mut i = 2;
+            while !used.insert(path.clone()) || path.exists() {
+                path = folder.join(format!("{base} ({i}).md"));
+                i += 1;
+            }
+            // Attachments go to `_resources`, and their `:/id` links point there.
+            let up = "../".repeat(rel.components().count());
+            let body = link(&n.body, &mut |id| {
+                let r = resources.get(id)?;
+                let src = state.resource_dir.join(r.file_name());
+                if !src.exists() {
+                    return None;
+                }
+                let name = r.file_name();
+                if copied.insert(id.to_string()) {
+                    let dir = root.join("_resources");
+                    std::fs::create_dir_all(&dir).ok()?;
+                    std::fs::copy(&src, dir.join(&name)).ok()?;
+                }
+                Some(format!("{up}_resources/{name}"))
+            });
+            let text = if n.title.is_empty() {
+                body
+            } else {
+                format!("# {}\n\n{}\n", n.title, body)
+            };
+            std::fs::write(&path, text)
+        })();
+        match result {
+            Ok(()) => written += 1,
+            Err(e) => failed.push(format!("{}: {e}", if n.title.is_empty() { &n.id } else { &n.title })),
         }
-        let text = if n.title.is_empty() {
-            n.body.clone()
-        } else {
-            format!("# {}\n\n{}\n", n.title, n.body)
-        };
-        std::fs::write(&path, text).map_err(err)?;
     }
-    Ok(notes.len())
+    if !failed.is_empty() {
+        tracing::warn!("could not export: {failed:?}");
+        if written == 0 {
+            return Err(failed.join("\n"));
+        }
+    }
+    Ok(written)
+}
+
+/// Replaces the targets of `:/<id>` links and images where `f` gives one.
+fn regex_lite_links() -> impl Fn(&str, &mut dyn FnMut(&str) -> Option<String>) -> String {
+    |text, f| {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some(i) = rest.find("(:/") {
+            let after = &rest[i + 3..];
+            let id_len = after.bytes().take_while(|b| b.is_ascii_hexdigit()).count();
+            out.push_str(&rest[..i + 1]);
+            if id_len == 32 && let Some(target) = f(&after[..32]) {
+                out.push_str(&target);
+                rest = &after[32..];
+            } else {
+                out.push_str(":/");
+                rest = after;
+            }
+        }
+        out.push_str(rest);
+        out
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -796,7 +948,7 @@ pub fn diary_streak(state: State<'_, AppState>, today: String) -> CmdResult<usiz
     let mut dates = std::collections::HashSet::new();
     for f in diary_folders(&db)? {
         for n in db
-            .query::<Note, _>("parent_id = ?1 AND deleted_time = 0", [&f.id])
+            .query::<Note, _>("parent_id = ?1 AND deleted_time = 0 AND is_conflict = 0", [&f.id])
             .map_err(err)?
         {
             if let Some(d) = diary_date(&n) {
@@ -878,11 +1030,100 @@ pub fn restore_revision(
     revision_id: String,
 ) -> CmdResult<NoteDto> {
     let db = state.db();
-    // Keep the current text in the history first.
-    let current = load_note(&db, &note_id)?;
-    db.create_revision(&current).map_err(err)?;
-    let n = db.restore_revision(&note_id, &revision_id).map_err(err)?;
+    // (The current text goes into the history first.)
+    let mut n = db.restore_revision(&note_id, &revision_id).map_err(err)?;
+    if n.parent_id.is_empty() {
+        n.parent_id = default_folder(&db)?;
+        db.save(&mut n).map_err(err)?;
+    }
     Ok(dto(&n))
+}
+
+/// Settles a conflict copy: `keep` = `copy` puts its text into the original
+/// note (re-creating it if it is gone), `original` drops the copy. Returns
+/// the note that remains.
+#[tauri::command]
+pub fn resolve_conflict(state: State<'_, AppState>, id: String, keep: String) -> CmdResult<String> {
+    let db = state.db();
+    let copy = load_note(&db, &id)?;
+    if copy.is_conflict == 0 {
+        return Err(tr("競合コピーではありません", "This is not a conflict copy").into());
+    }
+    let original = db
+        .load::<Note>(&copy.conflict_original_id)
+        .map_err(err)?
+        .filter(|n| n.deleted_time == 0);
+    match (keep.as_str(), original) {
+        ("copy", Some(mut o)) => {
+            o.title = copy.title.clone();
+            o.body = copy.body.clone();
+            db.save_note(&mut o).map_err(err)?;
+            db.delete(ItemType::Note, &copy.id).map_err(err)?;
+            Ok(o.id)
+        }
+        // The original is gone: the copy becomes an ordinary note.
+        ("copy", None) | ("original", None) => {
+            let mut n = copy;
+            n.is_conflict = 0;
+            n.conflict_original_id = String::new();
+            if db.load::<Folder>(&n.parent_id).map_err(err)?.is_none() {
+                n.parent_id = default_folder(&db)?;
+            }
+            db.save(&mut n).map_err(err)?;
+            Ok(n.id)
+        }
+        ("original", Some(o)) => {
+            db.delete(ItemType::Note, &copy.id).map_err(err)?;
+            Ok(o.id)
+        }
+        _ => Err("keep: copy or original".into()),
+    }
+}
+
+/// Removes a note's history (after locking it, its earlier text would stay
+/// readable there).
+#[tauri::command]
+pub fn clear_history(state: State<'_, AppState>, note_id: String) -> CmdResult<usize> {
+    state.db().delete_revisions(&note_id).map_err(err)
+}
+
+/// Keeps the history in the background: a version of each changed note every
+/// ten minutes or so, and versions older than `historyDays` (preference,
+/// 90 by default; 0 keeps them forever) removed at start.
+pub async fn keep_history<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    use tauri::Manager;
+    let state = app.state::<AppState>();
+    {
+        let db = state.db();
+        let days = preferences(&db).get("historyDays").and_then(|v| v.as_i64()).unwrap_or(90);
+        if days > 0
+            && let Err(e) = db.delete_old_revisions(days * 86_400_000)
+        {
+            tracing::warn!("could not remove old history: {e}");
+        }
+    }
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+        let ids = match state.db().notes_needing_revision() {
+            Ok(ids) => ids,
+            Err(e) => {
+                tracing::warn!("could not look for notes to record: {e}");
+                continue;
+            }
+        };
+        for id in ids {
+            // One note at a time: the window's commands get the database in between.
+            {
+                let db = state.db();
+                if let Ok(Some(n)) = db.load::<Note>(&id)
+                    && let Err(e) = db.create_revision(&n)
+                {
+                    tracing::warn!("could not record a version of {id}: {e}");
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    }
 }
 
 /// Records the current text in the history now ("save a version").
@@ -1022,7 +1263,7 @@ fn save_comments(db: &Database, n: &mut Note, comments: &[Comment]) -> CmdResult
     let value =
         (!comments.is_empty()).then(|| serde_json::to_value(comments).expect("serializable"));
     n.user_data = userdata::set(&n.user_data, COMMENTS_KEY, value);
-    db.save(n).map_err(err)
+    db.save_meta(n).map_err(err)
 }
 
 /// Comments of one note, or of all notes (not in the trash), newest first.
@@ -1195,6 +1436,20 @@ mod tests {
         assert_eq!(date_in_title("2026-13-01"), None);
         assert_eq!(date_in_title("第3章 2026-11-04"), None);
         assert_eq!(date_in_title("1234"), None);
+    }
+
+    #[test]
+    fn export_names_and_links() {
+        assert_eq!(file_name("CON", "x"), "CON_");
+        assert_eq!(file_name("nul.txt", "x"), "nul.txt_");
+        assert_eq!(file_name("com1", "x"), "com1_");
+        assert_eq!(file_name("Console", "x"), "Console");
+        assert_eq!(file_name("a/b: c?", "x"), "a_b_ c_");
+        assert_eq!(file_name(" . ", "x"), "x");
+        let id = "0123456789abcdef0123456789abcdef";
+        let text = format!("![絵](:/{id}) [他](:/{})", "f".repeat(32));
+        let out = regex_lite_links()(&text, &mut |i| (i == id).then(|| "../_resources/a.png".to_string()));
+        assert_eq!(out, format!("![絵](../_resources/a.png) [他](:/{})", "f".repeat(32)));
     }
 
     #[test]

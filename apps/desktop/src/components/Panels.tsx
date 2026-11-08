@@ -8,7 +8,7 @@ import { useT } from "../i18n";
 import { commentRange } from "../editor/comments";
 import { check, type Issue } from "../lib/proof";
 import { report, useStore } from "../store";
-import { countChars, longDate, relativeTime } from "../lib/text";
+import { countChars, longDate, markdownToPlain, relativeTime, rubyToHtml } from "../lib/text";
 
 export { PreviewPanel } from "./Genko";
 import { Icon } from "./Icon";
@@ -383,6 +383,61 @@ export function ProofPanel({ editor }: { editor: Editor | null }) {
             </span>
           </button>
         ))}
+      </div>
+    </aside>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Reference: another note (a character, the plot, notes for the chapter)
+// shown beside the text, to read while writing.
+
+export function ReferencePanel({ currentId }: { currentId: string }) {
+  const t = useT();
+  const referenceId = useStore((s) => s.referenceId);
+  const remoteVersion = useStore((s) => s.remoteVersion);
+  const [note, setNote] = useState<{ title: string; body: string } | null>(null);
+  useEffect(() => {
+    if (!referenceId) return setNote(null);
+    api.getNote(referenceId).then(
+      (n) => setNote({ title: n.title, body: n.body }),
+      () => useStore.getState().set({ referenceId: null }),
+    );
+  }, [referenceId, remoteVersion]);
+  const choose = async () => {
+    const notes = await api.listNotes({ kind: "all" }).catch(report);
+    if (!notes) return;
+    const id = await dialogs.choose(
+      t("reference.choose"),
+      notes.filter((n) => n.id !== currentId).map((n) => ({ value: n.id, label: n.title || t("list.untitled") })),
+    );
+    if (id) useStore.getState().set({ referenceId: id });
+  };
+  const paragraphs = useMemo(() => (note ? markdownToPlain(note.body).split(/\n+/).filter((p) => p.trim()) : []), [note]);
+  return (
+    <aside className="side-panel reference-panel">
+      <PanelHead title={note?.title || t("reference.title")}>
+        <button className="icon-btn" title={t("reference.choose")} onClick={() => void choose()}>
+          <Icon name="search" />
+        </button>
+        {referenceId && (
+          <button className="icon-btn" title={t("reference.open")} onClick={() => useStore.getState().select(referenceId)}>
+            <Icon name="note" />
+          </button>
+        )}
+      </PanelHead>
+      <div className="side-panel-body reference-body">
+        {!note ? (
+          <div className="empty">
+            {t("reference.empty")}
+            <br />
+            <button className="btn" onClick={() => void choose()}>
+              {t("reference.choose")}
+            </button>
+          </div>
+        ) : (
+          paragraphs.map((p, i) => <p key={i} dangerouslySetInnerHTML={{ __html: rubyToHtml(p) }} />)
+        )}
       </div>
     </aside>
   );

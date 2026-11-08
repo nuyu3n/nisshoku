@@ -422,7 +422,7 @@ pub fn set_work(state: State<'_, AppState>, folder_id: String, meta: Option<Work
     let db = state.db();
     let mut f = load_folder(&db, &folder_id)?;
     f.user_data = userdata::set(&f.user_data, WORK_KEY, meta.map(|m| json!(m)));
-    db.save(&mut f).map_err(err)
+    db.save_meta(&mut f).map_err(err)
 }
 
 #[tauri::command]
@@ -440,7 +440,7 @@ pub fn set_note_kind(state: State<'_, AppState>, note_id: String, kind: Option<S
     let mut n = load_note(&db, &note_id)?;
     let kind = kind.filter(|k| [KIND_CHARACTER, KIND_PLOT, KIND_MATERIAL].contains(&k.as_str()));
     n.user_data = userdata::set(&n.user_data, KIND_KEY, kind.map(|k| json!(k)));
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 #[tauri::command]
@@ -449,7 +449,7 @@ pub fn set_chapter_meta(state: State<'_, AppState>, note_id: String, meta: Chapt
     let mut n = load_note(&db, &note_id)?;
     let empty = meta == ChapterMeta::default();
     n.user_data = userdata::set(&n.user_data, CHAPTER_KEY, (!empty).then(|| json!(meta)));
-    db.save(&mut n).map_err(err)
+    db.save_meta(&mut n).map_err(err)
 }
 
 /// A new note of `kind` in the work's own notebook.
@@ -592,6 +592,22 @@ pub struct ManuscriptPart {
     title: String,
     depth: usize,
     notes: Vec<NoteDto>,
+}
+
+/// The manuscript of a work in order: (part title, its chapters), the
+/// work's own notebook without a part title.
+pub(crate) fn manuscript_notes(db: &Database, root: &Folder) -> CmdResult<Vec<(Option<String>, Vec<Note>)>> {
+    let mut out = Vec::new();
+    for (folder, depth) in work_tree(db, root)? {
+        let notes: Vec<Note> = notes_in(db, &folder.id)?
+            .into_iter()
+            .filter(|n| kind_of(n).is_none() && !crate::notes::is_template(n))
+            .collect();
+        if !notes.is_empty() {
+            out.push(((depth > 0).then(|| folder.title.clone()), notes));
+        }
+    }
+    Ok(out)
 }
 
 #[tauri::command]
