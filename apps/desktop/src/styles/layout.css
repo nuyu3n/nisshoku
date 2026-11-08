@@ -1,0 +1,867 @@
+/* Menus, row actions, tables, math, accents, and the layouts for medium
+   (sidebar and panels float) and narrow (one screen at a time) windows. */
+
+/* ----------------------------------------------------------------------- */
+/* Menus */
+
+.menu {
+  min-width: 232px;
+  max-width: 340px;
+  /* --menu-room: the height on screen (ContextMenu visibleArea). */
+  max-height: min(70vh, 520px, var(--menu-room, 100vh));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+}
+.menu .menu-item {
+  padding: 6px 10px;
+  gap: 10px;
+  font-size: 13px;
+}
+.menu .menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.menu .menu-item:disabled:hover {
+  background: transparent;
+}
+.menu-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-hint {
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+.menu-check {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  color: var(--accent);
+  flex: none;
+}
+.menu-check svg {
+  width: 16px;
+  height: 16px;
+}
+.menu-item .menu-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Rows with actions on hover (Notion-like) */
+
+.nav-item.has-actions {
+  user-select: none;
+}
+.nav-item .emoji {
+  width: 17px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+}
+.twisty.none {
+  visibility: hidden;
+}
+.row-actions {
+  display: none;
+  gap: 1px;
+  margin-right: -4px;
+}
+.row-actions button,
+.item-more {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.row-actions button:hover,
+.item-more:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.row-actions svg,
+.item-more svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+.nav-item.has-actions:hover .row-actions,
+.nav-item.has-actions:focus-within .row-actions {
+  display: inline-flex;
+}
+.nav-item.has-actions:hover .count,
+.nav-item.has-actions:focus-within .count {
+  display: none;
+}
+
+.note-item .t-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-item .t-row .t {
+  flex: 1;
+  min-width: 0;
+}
+.item-more {
+  opacity: 0;
+  flex: none;
+}
+.note-item:hover .item-more,
+.note-item.active .item-more {
+  opacity: 1;
+}
+.note-list.compact .note-item {
+  padding: 7px 12px;
+}
+.note-list.compact .note-item .x {
+  display: none;
+}
+.note-list.compact .note-item .m {
+  margin-top: 2px;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Editor top bar */
+
+.crumb {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.crumb-part {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.crumb-sep {
+  color: var(--text-3);
+  margin: 0 2px;
+}
+.crumb button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.crumb-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crumb-emoji {
+  flex: none;
+  font-size: 1.05em;
+}
+/* The caret says it opens a menu; quiet until hovered. */
+.crumb button svg.crumb-caret {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  opacity: 0.45;
+  transition: opacity 0.15s, translate 0.25s var(--ease);
+}
+.crumb button:hover svg.crumb-caret,
+.crumb button[aria-expanded="true"] svg.crumb-caret {
+  opacity: 0.9;
+  translate: 0 1px;
+}
+.editor-top .icon-btn,
+.editor-top .window-controls {
+  flex: none;
+}
+.save-state.error {
+  color: var(--danger);
+}
+.editor-empty {
+  margin-top: 16vh;
+}
+/* The logo, glowing like the startup screen's. */
+.empty-mark {
+  width: 50px;
+  height: 50px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--brand-logo) center / cover;
+  box-shadow:
+    0 0 14px 2px rgba(226, 115, 58, 0.42),
+    0 0 46px 10px rgba(226, 115, 58, 0.14);
+}
+.empty-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  letter-spacing: 0.15em;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Tables */
+
+.prose table {
+  table-layout: fixed;
+}
+.prose td,
+.prose th {
+  position: relative;
+  min-width: 3em;
+}
+.prose td > p,
+.prose th > p {
+  margin: 0;
+}
+.prose .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--selection);
+  pointer-events: none;
+}
+.prose .tableWrapper {
+  overflow-x: auto;
+  margin: 1em 0;
+}
+.table-tools {
+  position: fixed;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: var(--radius-m);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.table-tools button {
+  width: 30px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.table-tools button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.table-tools button.danger:hover {
+  color: var(--danger);
+}
+.table-tools svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Math */
+
+.prose .tiptap-mathematics-render {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+.prose .tiptap-mathematics-render:hover {
+  background: var(--accent-soft);
+}
+.prose [data-type="block-math"] {
+  margin: 1em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.prose .katex {
+  font-size: 1.05em;
+}
+.math-preview {
+  margin-top: 10px;
+  min-height: 48px;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  text-align: center;
+}
+.input.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* Emoji grid */
+.choice-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.tile {
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg);
+  font-size: 20px;
+  cursor: pointer;
+}
+.tile:first-child {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.tile:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Accents */
+
+:root[data-accent="vermilion"] {
+  --accent: #c8392b;
+  --accent-hover: #b02f22;
+  --accent-soft: #f6dcd8;
+  --accent-text: #a8301f;
+  --grid: rgba(200, 57, 43, 0.3);
+  --grid-soft: rgba(200, 57, 43, 0.1);
+  --selection: rgba(200, 57, 43, 0.18);
+}
+:root[data-accent="indigo"] {
+  --accent: #3f5ea8;
+  --accent-hover: #344f8f;
+  --accent-soft: #dde4f4;
+  --accent-text: #34508f;
+  --grid: rgba(63, 94, 168, 0.3);
+  --grid-soft: rgba(63, 94, 168, 0.1);
+  --selection: rgba(63, 94, 168, 0.2);
+}
+:root[data-accent="green"] {
+  --accent: #4b8a5e;
+  --accent-hover: #3f7650;
+  --accent-soft: #dcecdf;
+  --accent-text: #3c6f4c;
+  --grid: rgba(75, 138, 94, 0.3);
+  --grid-soft: rgba(75, 138, 94, 0.1);
+  --selection: rgba(75, 138, 94, 0.2);
+}
+:root[data-accent="sumi"] {
+  --accent: #4a4540;
+  --accent-hover: #3a3632;
+  --accent-soft: #e6e2db;
+  --accent-text: #3a3632;
+  --grid: rgba(74, 69, 64, 0.28);
+  --grid-soft: rgba(74, 69, 64, 0.09);
+  --selection: rgba(74, 69, 64, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="vermilion"] { --accent: #e3644f; --accent-soft: #4a2a24; --accent-text: #f08a77; }
+  :root:not([data-theme="light"])[data-accent="indigo"] { --accent: #7d9be0; --accent-soft: #283453; --accent-text: #a3b9ec; }
+  :root:not([data-theme="light"])[data-accent="green"] { --accent: #79b98b; --accent-soft: #24392b; --accent-text: #9dd0ab; }
+  :root:not([data-theme="light"])[data-accent="sumi"] { --accent: #cfc8bd; --accent-soft: #3a3631; --accent-text: #e2dcd2; --on-accent: #1f1e1b; }
+}
+:root[data-theme="dark"][data-accent="vermilion"] { --accent: #e3644f; --accent-soft: #4a2a24; --accent-text: #f08a77; }
+:root[data-theme="dark"][data-accent="indigo"] { --accent: #7d9be0; --accent-soft: #283453; --accent-text: #a3b9ec; }
+:root[data-theme="dark"][data-accent="green"] { --accent: #79b98b; --accent-soft: #24392b; --accent-text: #9dd0ab; }
+:root[data-theme="dark"][data-accent="sumi"] { --accent: #cfc8bd; --accent-soft: #3a3631; --accent-text: #e2dcd2; --on-accent: #1f1e1b; }
+
+.accent-swatches {
+  display: flex;
+  gap: 8px;
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+.swatch.on {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Medium windows: the sidebar is a drawer, panels float over the text. */
+
+/* It floats as a card, a little away from the window's edges (and clear of
+   the system bars on Android). */
+.app.layout-medium .sidebar {
+  --float-gap: 8px;
+  position: absolute;
+  top: calc(max(env(safe-area-inset-top), var(--inset-top, 0px)) + var(--float-gap));
+  bottom: calc(max(env(safe-area-inset-bottom), var(--inset-bottom, 0px)) + var(--float-gap));
+  left: calc(max(env(safe-area-inset-left), var(--inset-left, 0px)) + var(--float-gap));
+  z-index: 35;
+  margin-left: 0;
+  /* As wide as the note list it opens over. */
+  width: min(var(--list-w), 42vw);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform 0.22s var(--ease), visibility 0.22s;
+}
+.app.layout-medium .sidebar.closed {
+  margin-left: 0;
+  transform: translateX(calc(-100% - 2 * var(--float-gap) - max(env(safe-area-inset-left), var(--inset-left, 0px))));
+  box-shadow: none;
+}
+.drawer-backdrop,
+.panel-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  background: rgba(30, 24, 16, 0.18);
+  animation: fade 0.15s;
+}
+.panel-backdrop {
+  z-index: 14;
+}
+.app.layout-medium .editor-area,
+.app.layout-narrow .editor-area {
+  position: relative;
+}
+.app.layout-medium .side-panel,
+.app.layout-narrow .side-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 15;
+  box-shadow: var(--shadow);
+  max-width: calc(100% - 40px);
+}
+.app.layout-medium .side-panel.wide {
+  width: min(560px, calc(100% - 40px));
+}
+/* (A hidden list stays hidden: it must not keep its room, empty.) */
+.app.layout-medium:has(.side-panel.wide) .note-list:not(.closed) {
+  margin-left: 0;
+}
+.app.layout-medium .note-list {
+  width: min(var(--list-w), 42vw);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Narrow windows and phones: one screen at a time. */
+
+.app.layout-narrow .sidebar,
+.app.layout-narrow .note-list,
+.app.layout-narrow .main {
+  display: none;
+  width: 100%;
+  margin-left: 0 !important;
+  border-right: none;
+  flex: 1;
+  transform: none;
+}
+.app.layout-narrow.pane-nav .sidebar,
+.app.layout-narrow.pane-list .note-list,
+.app.layout-narrow.pane-editor .main {
+  display: flex;
+}
+.app.layout-narrow .paper {
+  padding: 18px 18px 40vh;
+}
+.app.layout-narrow .note-title {
+  font-size: 1.5em;
+}
+.app.layout-narrow .side-panel,
+.app.layout-narrow .side-panel.wide {
+  width: 100%;
+  max-width: 100%;
+}
+.app.layout-narrow .hide-narrow {
+  display: none !important;
+}
+.app.layout-narrow .save-state {
+  display: none;
+}
+.app.layout-narrow .status-bar {
+  gap: 12px;
+  padding: 0 14px;
+}
+.app.layout-narrow .find-bar {
+  left: 10px;
+  right: 10px;
+  width: auto;
+}
+.app.layout-narrow .item-more {
+  opacity: 1;
+}
+.app.layout-narrow .row-actions {
+  display: inline-flex;
+}
+.app.layout-narrow .nav-item .count {
+  display: none;
+}
+.back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Settings on small screens */
+@media (max-width: 719px) {
+  .dialog.large {
+    width: 100vw;
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+    /* The sheet runs under the system bars, in its own colours. */
+    border-style: solid;
+    border-color: var(--bg-elev);
+    border-top-color: var(--bg-sidebar);
+    border-width: var(--inset-top, 0px) var(--inset-right, 0px) var(--inset-bottom, 0px) var(--inset-left, 0px);
+  }
+  .overlay:has(> .dialog.large) {
+    padding: 0;
+  }
+  /* Only the settings sheet fills the screen; dialogs keep their height. */
+  .overlay > .dialog:not(.large):not(.viewer) {
+    align-self: center;
+  }
+  .overlay > .dialog.palette {
+    align-self: flex-start;
+    margin-top: 10px;
+  }
+  .overlay {
+    padding: var(--inset-top, 0px) var(--inset-right, 0px) var(--inset-bottom, 0px) var(--inset-left, 0px);
+    align-items: stretch;
+  }
+  .settings {
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+  .settings-nav {
+    width: auto;
+    display: flex;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .settings-nav .nav-item {
+    width: auto;
+    flex: none;
+  }
+  .settings-main {
+    padding: 14px 16px 24px;
+  }
+  .field {
+    flex-wrap: wrap;
+  }
+  .field .input,
+  .field select {
+    width: 100%;
+  }
+  .choice-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dialog.small,
+  .dialog,
+  .palette {
+    width: calc(100vw - 20px);
+  }
+}
+
+/* Touch screens: bigger targets, no hover-only controls, safe areas. */
+@media (pointer: coarse) {
+  .nav-item {
+    height: 40px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .note-item {
+    padding: 12px 14px;
+  }
+  .item-more,
+  .row-actions {
+    opacity: 1;
+    display: inline-flex;
+  }
+  .input {
+    font-size: 16px;
+  }
+  .menu .menu-item {
+    padding: 10px 12px;
+  }
+  .window-controls {
+    display: none;
+  }
+  .resizer {
+    display: none;
+  }
+  /* A tap focuses the button; only keyboards need the ring. */
+  button:focus-visible {
+    outline: none;
+  }
+}
+/* --inset-*: the system bars on Android (see lib/mobile.ts). */
+.app {
+  padding: max(env(safe-area-inset-top), var(--inset-top, 0px)) max(env(safe-area-inset-right), var(--inset-right, 0px))
+    max(env(safe-area-inset-bottom), var(--inset-bottom, 0px)) max(env(safe-area-inset-left), var(--inset-left, 0px));
+}
+
+/* Phones: the padding of .app (under the system bars) takes the colour of the screen shown. */
+.app.mobile.layout-narrow.pane-nav {
+  background: var(--bg-sidebar);
+}
+.app.mobile .kbd {
+  display: none;
+}
+.toasts {
+  bottom: calc(48px + var(--inset-bottom, 0px));
+}
+
+/* A part that failed to render (components/ErrorBoundary.tsx). */
+.error-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: var(--bg);
+}
+.error-pane.app {
+  height: 100%;
+  padding: max(env(safe-area-inset-top), var(--inset-top, 0px)) 16px max(env(safe-area-inset-bottom), var(--inset-bottom, 0px));
+}
+.error-box {
+  max-width: 420px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+.error-box > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--danger);
+}
+.error-box p {
+  margin: 0;
+  color: var(--text-2);
+}
+.error-box code {
+  max-width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-s, 6px);
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.error-box .row-buttons {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* Phones: menus are sheets at the bottom, with rows for fingers. */
+.app.mobile .menu:not(.slash-menu) {
+  left: 8px !important;
+  right: 8px;
+  top: auto !important;
+  bottom: calc(8px + var(--inset-bottom, 0px));
+  max-width: none;
+  max-height: min(75vh, 640px, var(--menu-room, 100vh));
+  border-radius: 18px;
+  padding: 8px;
+  box-shadow: 0 -8px 40px rgba(20, 14, 8, 0.28);
+  animation: sheet-up 0.16s var(--ease);
+}
+.app.mobile .menu:not(.slash-menu) .menu-item {
+  min-height: 46px;
+  font-size: 15px;
+}
+.app.mobile .menu-hint {
+  display: none;
+}
+.menu-sub-title {
+  display: none;
+}
+.app.mobile .menu-sub-title {
+  display: block;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+
+/* ----------------------------------------------------------------------- */
+/* The editor pane's width depends on the sidebar, the list and the panels,
+   not just the window: its bars give way by the width they actually have.
+   (The panels stay reachable from the "more" menu.) */
+
+.main {
+  container: main / inline-size;
+}
+@container main (max-width: 680px) {
+  .editor-top .panel-btn,
+  .editor-top .nav-buttons {
+    display: none;
+  }
+  .status-bar .st-reading {
+    display: none;
+  }
+}
+@container main (max-width: 560px) {
+  .status-bar .st-today,
+  .status-bar .st-timer-label {
+    display: none;
+  }
+  .status-bar {
+    gap: 12px;
+  }
+}
+@container main (max-width: 440px) {
+  .editor-top .save-state,
+  .status-bar .st-manuscript {
+    display: none;
+  }
+}
+
+/* Panels float over the text only when the editor pane is narrow; with room
+   to spare they sit beside it, and the text stays in view. */
+@container main (min-width: 820px) {
+  .app.layout-medium .side-panel:not(.wide) {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    box-shadow: none;
+  }
+}
+@container main (min-width: 1040px) {
+  .app.layout-medium .side-panel.wide {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    box-shadow: none;
+    width: min(560px, 50%);
+  }
+}
+
+/* Phones (touch, one screen at a time): larger text and tap targets than the
+   generic touch sizes above. Menus and dialogs live outside .app, hence the
+   plain media query for them. */
+@media (pointer: coarse) and (max-width: 719px) {
+  .app.layout-narrow {
+    font-size: 15px;
+  }
+  .app.layout-narrow .nav-item {
+    height: 48px;
+    font-size: 16px;
+    gap: 12px;
+  }
+  .app.layout-narrow .nav-item svg {
+    width: 20px;
+    height: 20px;
+  }
+  .app.layout-narrow .section-head {
+    font-size: 13px;
+  }
+  .app.layout-narrow .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .app.layout-narrow .icon-btn svg {
+    width: 21px;
+    height: 21px;
+  }
+  .app.layout-narrow .row-actions button,
+  .app.layout-narrow .item-more {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .app.layout-narrow .row-actions svg {
+    width: 19px !important;
+    height: 19px !important;
+  }
+  /* Three dots: they need more size than the outline icons to read. */
+  .app.layout-narrow :not(.menu-item) > svg[data-icon="more"] {
+    width: 24px !important;
+    height: 24px !important;
+    stroke-width: 2.6;
+  }
+  .app.layout-narrow .editor-top {
+    height: 58px;
+  }
+  .app.layout-narrow .crumb {
+    font-size: 15px;
+  }
+  .app.layout-narrow .list-head {
+    height: 58px;
+  }
+  .app.layout-narrow .list-title {
+    font-size: 18px;
+  }
+  .app.layout-narrow .list-sub {
+    font-size: 13.5px;
+  }
+  .app.layout-narrow .note-item {
+    padding: 14px 16px;
+  }
+  .app.layout-narrow .note-item .t {
+    font-size: 17px;
+  }
+  .app.layout-narrow .note-item .x {
+    font-size: 15px;
+  }
+  .app.layout-narrow .note-item .m {
+    font-size: 13.5px;
+  }
+  .app.layout-narrow .status-bar {
+    height: 46px;
+    font-size: 14px;
+  }
+  .app.layout-narrow .btn,
+  .btn {
+    height: 42px;
+    font-size: 15px;
+    padding: 0 16px;
+  }
+  .app.layout-narrow .chip {
+    height: 36px;
+    font-size: 14px;
+  }
+  .input {
+    height: 44px;
+  }
+  .menu .menu-item {
+    padding: 12px 14px;
+    font-size: 15.5px;
+  }
+  .menu .menu-item svg {
+    width: 18px;
+    height: 18px;
+  }
+  .dialog h3 {
+    font-size: 18px;
+  }
+}

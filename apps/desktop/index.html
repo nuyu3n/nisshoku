@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>日食</title>
+    <script>
+      // The theme chosen last time (App.tsx useTheme), before any style: the
+      // startup screen and the first frame are in the right colours.
+      try {
+        var theme = localStorage.getItem("nisshoku.theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
+    <style>
+      /* The startup screen: shown from the first frame, until the app has its
+         first screen ready (lib/motion.ts hideSplash). Plain CSS: nothing
+         else is loaded yet. */
+      /* The page's own background, before any stylesheet: never white in
+         the dark theme (styles/tokens.css --bg). */
+      html {
+        background: #faf9f5;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) {
+          background: #262522;
+          color-scheme: dark;
+        }
+      }
+      html[data-theme="dark"] {
+        background: #262522;
+        color-scheme: dark;
+      }
+      #splash {
+        --splash-bg: #faf9f5;
+        --splash-text: #2c2a26;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 26px;
+        background: var(--splash-bg);
+        transition: opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.42s;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) #splash {
+          --splash-bg: #262522;
+          --splash-text: #ece8e0;
+        }
+      }
+      html[data-theme="dark"] #splash {
+        --splash-bg: #262522;
+        --splash-text: #ece8e0;
+      }
+      /* The app icon (src-tauri/icons/source.svg): the moon in the earth's
+         shadow, in a night sky. It is eclipsed from the very first frame (a
+         fast start may hide this screen within a few hundred ms); the
+         shadow only settles the last bit, the stars twinkle, the glow breathes. */
+      #splash .eclipse {
+        width: 132px;
+        height: 132px;
+        filter: drop-shadow(0 10px 24px rgba(22, 18, 30, 0.28));
+        transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: splash-rise 0.75s cubic-bezier(0.34, 1.45, 0.64, 1) backwards;
+      }
+      #splash svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      #splash .shadow {
+        animation: splash-shadow 0.9s 0.1s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+      }
+      #splash .glow {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: splash-breathe 2.6s 0.6s ease-in-out infinite;
+      }
+      #splash .star {
+        animation: splash-twinkle 2.2s ease-in-out infinite;
+      }
+      #splash .star:nth-of-type(2) {
+        animation-delay: 0.7s;
+      }
+      #splash .star:nth-of-type(3) {
+        animation-delay: 1.4s;
+      }
+      #splash .name {
+        font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+        font-size: 22px;
+        letter-spacing: 0.6em;
+        margin-right: -0.6em;
+        color: var(--splash-text);
+        animation: splash-name 0.9s 0.25s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+      }
+      @keyframes splash-rise {
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.86);
+        }
+      }
+      /* Only the last of the eclipse: from a little lower right into place. */
+      @keyframes splash-shadow {
+        from {
+          transform: translate(70px, 70px);
+        }
+      }
+      @keyframes splash-breathe {
+        50% {
+          opacity: 0.7;
+          transform: scale(1.04);
+        }
+      }
+      @keyframes splash-twinkle {
+        50% {
+          opacity: 0.25;
+        }
+      }
+      @keyframes splash-name {
+        from {
+          opacity: 0;
+          letter-spacing: 1.1em;
+          margin-right: -1.1em;
+        }
+      }
+      #splash.gone {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #splash.gone .eclipse {
+        transform: scale(1.12);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash *,
+        #splash {
+          animation-duration: 1ms !important;
+          animation-delay: 0s !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 1ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash" aria-hidden="true">
+      <div class="eclipse">
+        <svg viewBox="64 64 896 896">
+          <defs>
+            <linearGradient id="splash-sky" x1="0" y1="0" x2="0.4" y2="1">
+              <stop offset="0" stop-color="#2e2540" />
+              <stop offset="1" stop-color="#16121e" />
+            </linearGradient>
+            <radialGradient id="splash-glow" cx="512" cy="512" r="430" gradientUnits="userSpaceOnUse">
+              <stop offset="0.66" stop-color="#e2733a" stop-opacity="0.38" />
+              <stop offset="1" stop-color="#e2733a" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="splash-umbra" cx="770" cy="770" r="520" gradientUnits="userSpaceOnUse">
+              <stop offset="0.42" stop-color="#5e1f10" />
+              <stop offset="0.8" stop-color="#ab3f1a" />
+              <stop offset="1" stop-color="#e98443" />
+            </radialGradient>
+            <clipPath id="splash-disc"><circle cx="512" cy="512" r="290" /></clipPath>
+            <clipPath id="splash-tile"><rect x="64" y="64" width="896" height="896" rx="200" /></clipPath>
+          </defs>
+          <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#splash-sky)" />
+          <g clip-path="url(#splash-tile)">
+            <circle class="star" cx="232" cy="270" r="7" fill="#f4e6cf" opacity="0.8" />
+            <circle class="star" cx="800" cy="208" r="5" fill="#f4e6cf" opacity="0.6" />
+            <circle class="star" cx="842" cy="790" r="6" fill="#f4e6cf" opacity="0.45" />
+            <circle class="glow" cx="512" cy="512" r="430" fill="url(#splash-glow)" />
+          </g>
+          <g clip-path="url(#splash-disc)">
+            <!-- sunlit rim, penumbra, umbra -->
+            <circle cx="512" cy="512" r="290" fill="#f8ecd6" />
+            <g class="shadow">
+              <circle cx="770" cy="770" r="542" fill="#eeac78" />
+              <circle cx="770" cy="770" r="520" fill="url(#splash-umbra)" />
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="name">日食</div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

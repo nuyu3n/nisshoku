@@ -1,0 +1,359 @@
+/* The app's own look for what the system would otherwise draw: tooltips,
+   checkboxes, selects, number steppers, scrollbars, drag images, and the
+   browser's touch and caret defaults. */
+
+/* ----------------------------------------------------------------------- */
+/* Browser defaults */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+/* Android's WebView flashes a blue box on whatever is tapped; on every
+   element, as the highlighted node is not always one that inherits it. */
+*,
+*::before,
+*::after {
+  -webkit-tap-highlight-color: transparent;
+}
+/* A tap or click focuses without a ring (keyboards still get it). */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+/* No rubber-band stretching of the window. Only here, not on every element:
+   on a box that scrolls sideways (the notebook tree, tables, the plot board)
+   `contain` also stopped vertical wheel and swipe scrolling from reaching the
+   panel around it. */
+html,
+body {
+  overscroll-behavior: none;
+}
+input,
+textarea,
+[contenteditable="true"] {
+  caret-color: var(--accent);
+}
+::placeholder {
+  color: var(--text-3);
+  opacity: 1;
+}
+img,
+svg,
+a {
+  -webkit-user-drag: none;
+}
+.prose img {
+  -webkit-user-drag: auto;
+}
+
+/* Scrollbars: thin, rounded, only on hover; no white corner where two meet. */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+/* The grip of resizable text areas. */
+::-webkit-resizer {
+  background:
+    linear-gradient(135deg, transparent 0 55%, var(--border-strong) 55% 62%, transparent 62% 72%, var(--border-strong) 72% 79%, transparent 79%);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Tooltips */
+
+.tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: 280px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--tooltip-bg, #2b2724);
+  color: var(--tooltip-text, #f4efe7);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  white-space: pre-line;
+  box-shadow: 0 4px 14px rgba(20, 14, 8, 0.18);
+  animation: tooltip-in 0.12s var(--ease);
+}
+:root[data-theme="dark"] .tooltip {
+  --tooltip-bg: #ece6dc;
+  --tooltip-text: #23201c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tooltip {
+    --tooltip-bg: #ece6dc;
+    --tooltip-text: #23201c;
+  }
+}
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/* The chip that follows the pointer while dragging. */
+.drag-chip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  max-width: 260px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font: 600 12.5px var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--shadow);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Checkboxes */
+
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-input);
+  display: inline-grid;
+  place-content: center;
+  vertical-align: -3px;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+input[type="checkbox"]::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: var(--on-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: scale(0);
+  transition: transform 0.12s var(--ease);
+}
+input[type="checkbox"]:hover {
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::after {
+  transform: scale(1);
+}
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Select (components/Controls.tsx) */
+
+.input.select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.input.select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.input.select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.input.select .select-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.input.select svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+/* (Not `.empty`: that is the empty-state message, with its big padding.) */
+.input.select.unset .select-label {
+  color: var(--text-3);
+}
+
+/* Number with steppers */
+.number-field {
+  display: inline-flex;
+  align-items: stretch;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.number-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--grid-soft);
+}
+.number-field .input,
+.number-input .number-field .input {
+  border: none;
+  box-shadow: none !important;
+  background: transparent;
+  height: 100%;
+  width: 7ch !important;
+  min-width: 0;
+  padding: 0 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.number-step {
+  flex: none;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.number-step:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent-text);
+}
+.number-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.number-step svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Date */
+.date-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.date-field .input.select {
+  flex: 1;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Emoji picker (components/EmojiPicker.tsx) */
+
+.dialog.emoji-dialog {
+  width: min(440px, calc(100vw - 24px));
+}
+.emoji-dialog .dialog-body {
+  padding-bottom: 0;
+}
+.emoji-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.emoji-search {
+  position: relative;
+}
+.emoji-search > svg {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 15px;
+  height: 15px;
+  color: var(--text-3);
+}
+.emoji-search .input {
+  padding-left: 32px;
+}
+.emoji-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.emoji-tabs button {
+  flex: 1;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  filter: grayscale(0.7);
+  opacity: 0.7;
+  display: grid;
+  place-items: center;
+}
+.emoji-tabs button svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-2);
+}
+.emoji-tabs button:hover {
+  background: var(--bg-hover);
+  filter: none;
+  opacity: 1;
+}
+.emoji-tabs button.on {
+  background: var(--accent-soft);
+  filter: none;
+  opacity: 1;
+}
+.emoji-scroll {
+  height: min(320px, 46vh);
+  overflow-y: auto;
+  margin: 0 -6px;
+  padding: 0 6px 10px;
+}
+.emoji-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 2px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--bg-elev);
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 2px;
+}
+.emoji-tile {
+  height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+.emoji-tile:hover {
+  background: var(--bg-hover);
+  transform: scale(1.08);
+}
+.emoji-tile.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}

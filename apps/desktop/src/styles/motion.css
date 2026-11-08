@@ -1,0 +1,603 @@
+/* Motion. Springy and quick: things arrive with a little overshoot and
+   settle, and leave faster than they came. Only transform and opacity move
+   (never the layout), so it stays smooth on slow phones too.
+   Entrances fill `backwards`, never `both`: a finished animation that keeps
+   a transform makes its element the box of every `position: fixed` child
+   (a submenu, the editor's popups), which then get misplaced and clipped.
+   The exits (.leaving) are played by lib/motion.ts startExitAnimations. */
+
+:root {
+  /* Springs as linear() curves; the numbers come from a damped spring. */
+  --spring: linear(0, 0.0036 1%, 0.0151, 0.0347 3.1%, 0.0646 4.3%, 0.1361 6.6%, 0.3123 11.5%, 0.4919 16.3%, 0.6402 20.6%, 0.7656 24.8%, 0.8614 28.8%, 0.9416 33%, 0.9993 37.2%, 1.0379 41.4%, 1.0606 45.7%, 1.0702 50.3%, 1.0694 54.6%, 1.0566 61.2%, 1.0156 74.4%, 1.0023 83.4%, 0.9988 90.4%, 1);
+  --spring-soft: linear(0, 0.0047 1%, 0.0196, 0.0446 3.2%, 0.1675 6.9%, 0.3587 11.5%, 0.5393 16.3%, 0.6866 21%, 0.8035 25.8%, 0.8889 30.6%, 0.9479 35.5%, 0.9867 40.6%, 1.0082 45.8%, 1.0181 51.6%, 1.0194 57.6%, 1.0121 68.4%, 1.0029 82.4%, 1);
+  /* A press that springs back with a visible bounce. */
+  --spring-bouncy: linear(0, 0.0102 1%, 0.0418, 0.0943 3.2%, 0.3413 7%, 0.6812 12.1%, 0.9581 17.4%, 1.1235 22.6%, 1.1863 27.7%, 1.1782 31.4%, 1.1404 35.4%, 1.0285 45.3%, 0.9759 54.5%, 0.9681 59.4%, 0.9751 65.3%, 1.0022 79.4%, 1.0047 85.8%, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2);
+  --t-press: 90ms;
+  --t-exit: 170ms;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Pressing: buttons give under the finger and spring back. `scale` (not
+   `transform`) so that it adds to whatever transform they have. */
+
+.btn,
+.icon-btn,
+.chip,
+.nav-item,
+.task-check,
+.day,
+.search-trigger,
+.work-tabs button,
+.plot-card,
+.char-card,
+.add-input-btn {
+  transition:
+    scale 520ms var(--spring-bouncy),
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.2s;
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.search-trigger:active,
+.add-input-btn:active:not(:disabled) {
+  scale: 0.93;
+  transition-duration: var(--t-press), 0.15s, 0.15s, 0.15s, 0.2s;
+  transition-timing-function: var(--ease-out);
+}
+.chip:active,
+.task-check:active,
+.day:active:not(:disabled) {
+  scale: 0.88;
+  transition-duration: var(--t-press);
+  transition-timing-function: var(--ease-out);
+}
+/* Wide rows give less, or they look like they shrink away. */
+.nav-item:active,
+.work-tabs button:active {
+  scale: 0.975;
+  transition-duration: var(--t-press);
+  transition-timing-function: var(--ease-out);
+}
+.note-item {
+  transition:
+    scale 520ms var(--spring-bouncy),
+    background-color 0.15s,
+    box-shadow 0.2s;
+}
+.note-item:active {
+  scale: 0.985;
+  transition-duration: var(--t-press);
+  transition-timing-function: var(--ease-out);
+}
+
+/* The selected note's mark grows from its middle. */
+.note-item.active::before {
+  animation: mark-in 460ms var(--spring) backwards;
+}
+@keyframes mark-in {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Lists: the first rows come in one after the other (NoteList sets --i). */
+
+.note-item.enter {
+  animation: row-in 540ms var(--spring-soft) backwards;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* A tab's content comes in from the side of the tab chosen. */
+.tab-body {
+  animation: tab-in-forward 460ms var(--spring-soft) backwards;
+}
+.tab-body[data-dir="back"] {
+  animation-name: tab-in-back;
+}
+@keyframes tab-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+}
+@keyframes tab-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Tab indicators (lib/motion.ts useInk) slide to the chosen tab. */
+
+.inked {
+  position: relative;
+  isolation: isolate;
+}
+.inked > .ink {
+  position: absolute;
+  left: 0;
+  width: var(--ink-w, 0);
+  transform: translateX(var(--ink-x, 0));
+  pointer-events: none;
+}
+.inked.ink-ready > .ink {
+  transition:
+    transform 560ms var(--spring),
+    width 560ms var(--spring);
+}
+/* The sidebar's segmented control: a raised pill under the chosen chip. */
+.chip-bar.inked > .ink {
+  top: 3px;
+  bottom: 3px;
+  z-index: -1;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-s);
+}
+.chip-bar.inked .chip.active {
+  background: transparent;
+  box-shadow: none;
+}
+/* The work's tabs: an underline. */
+.work-tabs.inked > .ink {
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.work-tabs.inked button.active {
+  border-bottom-color: transparent;
+}
+.work-tabs button {
+  transition:
+    scale 520ms var(--spring-bouncy),
+    color 0.2s;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Dialogs: the backdrop fades, the dialog springs up. */
+
+.overlay {
+  animation: fade-in 220ms var(--ease-out) backwards;
+}
+.overlay > .dialog,
+.overlay > .palette {
+  animation: dialog-in 520ms var(--spring) backwards;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+  }
+  /* Opacity is not springy: it gets there early and stays. */
+  35% {
+    opacity: 1;
+  }
+}
+.overlay.leaving {
+  animation: fade-out var(--t-exit) var(--ease-in) forwards;
+  pointer-events: none;
+}
+.overlay.leaving > * {
+  animation: dialog-out var(--t-exit) var(--ease-in) forwards;
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+}
+/* Phones: the settings sheet comes up from the bottom and goes back down. */
+@media (max-width: 719px) {
+  .overlay > .dialog.large {
+    animation: sheet-in 560ms var(--spring-soft) backwards;
+  }
+  .overlay.leaving > .dialog.large {
+    animation: sheet-out 220ms var(--ease-in) forwards;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Menus grow from where they were opened (ContextMenu sets the origin), the
+   items following a beat behind. */
+
+.menu {
+  animation: menu-in 380ms var(--spring) backwards;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  30% {
+    opacity: 1;
+  }
+}
+.menu > .menu-item {
+  animation: menu-item-in 340ms var(--spring-soft) backwards;
+  animation-delay: calc(var(--i, 0) * 14ms + 30ms);
+}
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.menu.leaving {
+  animation: menu-out 130ms var(--ease-in) forwards;
+  pointer-events: none;
+}
+.menu.leaving > .menu-item {
+  animation: none;
+}
+@keyframes menu-out {
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+/* Phones: menus are sheets from the bottom edge. */
+.app.mobile .menu:not(.slash-menu) {
+  transform-origin: 50% 100% !important;
+  animation: sheet-in 520ms var(--spring-soft) backwards;
+}
+.app.mobile .menu:not(.slash-menu) > .menu-item {
+  animation-name: menu-row-in;
+  animation-delay: calc(var(--i, 0) * 22ms + 60ms);
+}
+@keyframes menu-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.app.mobile .menu.leaving:not(.slash-menu) {
+  animation: sheet-out 200ms var(--ease-in) forwards;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Toasts pop up from below; leaving, they drop and the others close up. */
+
+.toast {
+  animation: toast-in 560ms var(--spring) backwards;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.9);
+  }
+  30% {
+    opacity: 1;
+  }
+}
+.toast.leaving {
+  animation: toast-out 240ms var(--ease-in) forwards;
+  overflow: hidden;
+}
+@keyframes toast-out {
+  from {
+    height: var(--h);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: -8px;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* The sidebar drawer, side panels and backdrops. */
+
+.app.layout-medium .sidebar {
+  transition:
+    transform 560ms var(--spring-soft),
+    visibility 560ms;
+}
+.app.layout-medium .sidebar.closed {
+  transition:
+    transform 260ms var(--ease-in),
+    visibility 260ms;
+}
+.drawer-backdrop,
+.panel-backdrop {
+  animation: fade-in 260ms var(--ease-out) backwards;
+}
+.drawer-backdrop.leaving,
+.panel-backdrop.leaving {
+  animation: fade-out 220ms var(--ease-in) forwards;
+}
+/* Panels over the editor slide in from the right edge. */
+.app.layout-medium .side-panel,
+.app.layout-narrow .side-panel {
+  animation: panel-in 520ms var(--spring-soft) backwards;
+}
+@keyframes panel-in {
+  from {
+    transform: translateX(36px);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Phones, one screen at a time: the new screen slides in from the side it
+   comes from (App sets data-nav), as a stack of pages. It plays whenever a
+   screen becomes visible (display: none → flex). */
+
+.app.layout-narrow.pane-nav .sidebar,
+.app.layout-narrow.pane-list .note-list,
+.app.layout-narrow.pane-editor .main {
+  animation: pane-forward 520ms var(--spring-soft) backwards;
+}
+.app.layout-narrow[data-nav="back"].pane-nav .sidebar,
+.app.layout-narrow[data-nav="back"].pane-list .note-list,
+.app.layout-narrow[data-nav="back"].pane-editor .main {
+  animation-name: pane-back;
+}
+@keyframes pane-forward {
+  from {
+    transform: translateX(42%);
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+@keyframes pane-back {
+  from {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Small pleasures. */
+
+/* A task ticked: the ring fills with a pop, the check draws itself; then
+   the row folds away (when it leaves the open tasks). */
+.task-row.ticked .task-check svg {
+  animation: tick-pop 520ms var(--spring-bouncy);
+}
+.task-row.ticked .task-check svg path {
+  stroke-dasharray: 30;
+  animation: tick-draw 380ms 80ms var(--ease-out) backwards;
+}
+@keyframes tick-pop {
+  from {
+    scale: 0.6;
+  }
+}
+.task-row.leaving {
+  overflow: hidden;
+  animation: row-fold 360ms var(--ease-in) forwards;
+}
+@keyframes row-fold {
+  from {
+    height: var(--h);
+  }
+  to {
+    height: 0;
+    min-height: 0;
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 30;
+  }
+}
+
+/* The chosen day of a calendar. */
+.day.selected {
+  animation: day-pop 480ms var(--spring-bouncy);
+}
+@keyframes day-pop {
+  from {
+    scale: 0.7;
+  }
+}
+
+/* A calendar's months slide inside its card. */
+.calendar {
+  overflow: hidden;
+}
+
+/* An opened notebook's children unfold under it. */
+.folder-children {
+  animation: unfold 420ms var(--spring-soft) backwards;
+  transform-origin: top;
+}
+@keyframes unfold {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scaleY(0.92);
+  }
+}
+
+/* The diary's mood and weather: the chosen one pops. */
+.meta-choice {
+  transition:
+    scale 520ms var(--spring-bouncy),
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.meta-choice:active {
+  scale: 0.9;
+  transition-duration: var(--t-press);
+  transition-timing-function: var(--ease-out);
+}
+.meta-choice.on {
+  animation: day-pop 480ms var(--spring-bouncy);
+}
+
+/* Switches flick over with a bounce. */
+.switch::after {
+  transition: transform 460ms var(--spring-bouncy);
+}
+
+/* Tooltips spring out of the thing they explain. */
+.tooltip {
+  animation: tip-in 300ms var(--spring) backwards;
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.92);
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* Plot cards and character cards lift a little under the pointer. */
+@media (hover: hover) {
+  .plot-card:hover,
+  .char-card:hover {
+    scale: 1.015;
+  }
+}
+
+/* The empty editor's mark breathes. */
+.empty-mark {
+  animation: breathe 4.2s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    scale: 1.05;
+    opacity: 0.85;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Loading placeholders (components/Skeleton.tsx). They wait a moment before
+   showing, so that a quick load shows nothing at all; then a soft light
+   sweeps over them. */
+
+.skeleton {
+  animation: skeleton-in 300ms 160ms var(--ease-out) backwards;
+}
+@keyframes skeleton-in {
+  from {
+    opacity: 0;
+  }
+}
+.bone {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  border-radius: 5px;
+  background: linear-gradient(100deg, var(--bg-active) 30%, color-mix(in srgb, var(--bg-active) 40%, var(--bg-elev)) 50%, var(--bg-active) 70%) 0 0 / 300% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+.skeleton-note {
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 14px;
+}
+.skeleton-tabs {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.skeleton-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 4px;
+}
+.skeleton-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.skeleton-sheet {
+  padding: 4px 0 18px;
+  font-family: var(--font-ui);
+}
+.skeleton-text {
+  display: grid;
+  gap: 18px;
+  padding-top: 8px;
+}
+.chapter-bar.skeleton .bone {
+  display: inline-block;
+}
+.list-sub.pending > span {
+  visibility: hidden;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Asked for less motion: things just appear and go. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .bone {
+    animation: none !important;
+  }
+}

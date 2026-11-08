@@ -1,0 +1,359 @@
+/* Vertical manuscript preview (縦書き原稿用紙): see components/Genko.tsx. */
+
+.app.layout-medium .side-panel.genko-panel {
+  width: min(780px, calc(100% - 40px));
+}
+.genko-head-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.genko-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-2);
+  flex: none;
+}
+.genko-nav,
+.genko-zoom,
+.genko-inks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.genko-count {
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.genko-count b {
+  color: var(--text);
+}
+.genko-fit {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: var(--radius-s);
+  padding: 2px 6px;
+  min-width: 48px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.genko-fit:hover {
+  background: var(--bg-hover);
+}
+.genko-fit.on {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.genko-ink {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-list);
+  outline: 1px solid var(--border-strong);
+  background: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  margin: 0 2px;
+}
+.genko-ink.on {
+  outline: 2px solid var(--ink);
+}
+.genko-follow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.genko-status {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 5px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-3);
+  flex: none;
+}
+
+/* Inks of the grid. */
+[data-ink] {
+  --ink: var(--accent);
+}
+[data-ink="vermilion"] {
+  --ink: #cf3f2a;
+}
+[data-ink="green"] {
+  --ink: #3d7d50;
+}
+[data-ink="indigo"] {
+  --ink: #34558f;
+}
+[data-ink="sumi"] {
+  --ink: #57524a;
+}
+:root[data-theme="dark"] [data-ink="sumi"] {
+  --ink: #a49d92;
+}
+:root[data-theme="dark"] [data-ink="indigo"] {
+  --ink: #7f9bd1;
+}
+:root[data-theme="dark"] [data-ink="green"] {
+  --ink: #6fae7f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-ink="sumi"] {
+    --ink: #a49d92;
+  }
+  :root:not([data-theme="light"]) [data-ink="indigo"] {
+    --ink: #7f9bd1;
+  }
+  :root:not([data-theme="light"]) [data-ink="green"] {
+    --ink: #6fae7f;
+  }
+}
+
+.genko-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  direction: rtl;
+  background: var(--bg-sidebar);
+}
+.genko {
+  /* Cells, the band beside each line for ruby, the fold. */
+  --gap: calc(var(--cell) * 0.32);
+  --fold-w: calc(var(--cell) * 1.15 * var(--fold));
+  --rule: color-mix(in srgb, var(--ink) 80%, transparent);
+  --rule-soft: color-mix(in srgb, var(--ink) 45%, transparent);
+  --paper: #fffdf8;
+  --type: #23201b;
+  --gk-active: color-mix(in srgb, var(--ink) 9%, transparent);
+  --gk-cursor: color-mix(in srgb, var(--ink) 24%, transparent);
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 20px;
+  direction: rtl;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+:root[data-theme="dark"] .genko {
+  --paper: #2c2a26;
+  --type: #ece6da;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .genko {
+    --paper: #2c2a26;
+    --type: #ece6da;
+  }
+}
+.gk-page {
+  flex: none;
+  direction: ltr;
+  position: relative;
+  box-sizing: content-box;
+  /* Sized by the grid, so pages away from the screen (left empty) keep their place. */
+  width: calc(var(--rows) * (var(--cell) + var(--gap)) + var(--gap) + var(--fold-w) + 3px);
+  height: calc(var(--cols) * var(--cell) + 3px);
+  padding: calc(var(--cell) * 1.2) calc(var(--cell) * 1.1) calc(var(--cell) * 2.2);
+  background: var(--paper);
+  box-shadow: var(--shadow-s), 0 0 0 1px var(--border);
+  color: var(--type);
+  font-family: var(--font-serif);
+  contain: layout paint;
+}
+.gk-sheet {
+  display: flex;
+  flex-direction: row-reverse;
+  border: 1.5px solid var(--ink);
+  padding-left: var(--gap);
+  height: calc(var(--cols) * var(--cell));
+  box-sizing: content-box;
+}
+.gk-line {
+  position: relative;
+  flex: none;
+  width: var(--cell);
+  padding-right: var(--gap);
+  box-sizing: content-box;
+}
+.genko .gk-line[data-p]:not([data-p="-1"]) {
+  cursor: pointer;
+}
+.genko .gk-line[data-p]:not([data-p="-1"]):hover .gk-cells {
+  background-color: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.gk-cells {
+  position: relative;
+  height: calc(var(--cols) * var(--cell));
+  box-sizing: border-box;
+  border-left: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+  /* A rule across the column at every cell. */
+  background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--cell) - 1px), var(--rule-soft) calc(var(--cell) - 1px) var(--cell));
+  display: flex;
+  flex-direction: column;
+}
+.gk-cells .c {
+  flex: none;
+  width: 100%;
+  height: var(--cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: calc(var(--cell) * 0.74);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: visible;
+}
+/* Capitals and lone letters stand upright, one to a cell. */
+.gk-cells .c.up {
+  text-orientation: upright;
+  font-size: calc(var(--cell) * 0.64);
+}
+/* Two half-width characters side by side (縦中横). */
+.gk-cells .c.tcy {
+  text-combine-upright: all;
+  -webkit-text-combine: horizontal;
+  font-size: calc(var(--cell) * 0.68);
+}
+/* Half-width words, phrases and URLs on their side (横倒し), two
+   characters in each cell. */
+.gk-cells .c.rot {
+  text-orientation: sideways;
+  font-size: calc(var(--cell) * 0.58);
+  letter-spacing: -0.02em;
+  white-space: pre;
+}
+/* 、。 below the grid (ぶら下げ). */
+.gk-cells .hang {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gk-line .rb {
+  position: absolute;
+  right: 0;
+  top: calc(var(--at) * var(--cell));
+  height: calc(var(--len) * var(--cell));
+  width: var(--gap);
+  writing-mode: vertical-rl;
+  text-align: center;
+  font-size: min(calc(var(--gap) * 0.95), calc(var(--cell) * 0.36));
+  line-height: var(--gap);
+  white-space: nowrap;
+  overflow: visible;
+}
+/* The fold (柱) with its fish-tail marks (魚尾). */
+.gk-fold {
+  flex: none;
+  width: var(--fold-w);
+  box-sizing: border-box;
+  border-left: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--cols) * var(--cell) * 0.18) 0;
+  gap: calc(var(--cell) * 0.4);
+}
+.gk-fold .fish {
+  width: 70%;
+  height: calc(var(--cell) * 0.72);
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 55%, 0 100%);
+  flex: none;
+}
+.gk-fold .fish.down {
+  margin-top: auto;
+  transform: scaleY(-1);
+}
+.gk-fold-title {
+  writing-mode: vertical-rl;
+  font-size: calc(var(--cell) * 0.5);
+  color: var(--ink);
+  max-height: calc(var(--cols) * var(--cell) * 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.15em;
+}
+.gk-foot {
+  position: absolute;
+  left: calc(var(--cell) * 1.1);
+  right: calc(var(--cell) * 1.1);
+  bottom: calc(var(--cell) * 0.5);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: calc(var(--cell) * 0.46);
+  color: var(--ink);
+}
+.gk-no {
+  font-size: calc(var(--cell) * 0.56);
+  color: var(--type);
+  font-variant-numeric: tabular-nums;
+}
+.gk-no::before,
+.gk-no::after {
+  content: "—";
+  margin: 0 0.5em;
+  color: var(--rule-soft);
+}
+
+/* Printing: the sheets in a box of their own at the end of the body, shown
+   only on paper and only while the preview prints (the rest of the app is
+   hidden then). The rules are backgrounds and shapes: printed as they are. */
+.gk-print {
+  display: none;
+}
+@media print {
+  /* (#root by its id too: the note's print styles show it by its id.) */
+  body.printing-genko > :not(.gk-print),
+  body.printing-genko > #root {
+    display: none !important;
+  }
+  body.printing-genko > .gk-print {
+    display: block !important;
+    padding: 0;
+    min-width: 0;
+    background: #fff;
+  }
+  .gk-print,
+  .gk-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .gk-print .gk-page {
+    --paper: #fff;
+    --type: #000;
+    box-shadow: none;
+    margin: 0 auto;
+    contain: none;
+    break-after: page;
+    break-inside: avoid;
+  }
+  .gk-print .gk-page:last-child {
+    break-after: auto;
+  }
+}
+
+/* Beside the text (see layout.css): as wide as leaves the text its room. */
+@container main (min-width: 1040px) {
+  .app.layout-medium .side-panel.genko-panel {
+    width: min(780px, 55%);
+  }
+}

@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">日食</string>
+    <string name="main_activity_title">日食</string>
+    <string name="widget_tasks">タスク</string>
+    <string name="widget_tasks_description">期限の近いタスク。タップで完了</string>
+    <string name="widget_writing">今日の執筆</string>
+    <string name="widget_writing_description">今日書いた文字数と連続日数</string>
+    <string name="widget_diary">日記</string>
+    <string name="widget_diary_description">今日の日記をすぐに書く</string>
+    <string name="widget_add_task">タスクを追加</string>
+    <string name="widget_complete">完了にする</string>
+    <!-- Sample content of the widget previews. -->
+    <string name="widget_sample_task_1">資料を図書館に返す</string>
+    <string name="widget_sample_due_1">昨日</string>
+    <string name="widget_sample_task_2">第3章を見直す</string>
+    <string name="widget_sample_due_2">今日</string>
+    <string name="widget_sample_task_3">編集者に返信</string>
+    <string name="widget_sample_due_3">今日 18:00</string>
+    <string name="widget_sample_unit">字</string>
+    <string name="widget_sample_streak">5日連続 · 目標まであと 760字</string>
+    <string name="widget_sample_date">11月5日</string>
+    <string name="widget_sample_status">1,240字 書きました</string>
+    <string name="widget_sample_write">続きを書く</string>
+    <string name="widget_sample_new_note">新しいノート</string>
+    <!-- ランチャーのショートカット、共有、テキスト選択メニュー、クイック設定タイル。 -->
+    <string name="shortcut_diary">日記</string>
+    <string name="shortcut_diary_long">今日の日記</string>
+    <string name="shortcut_new_note">新しいノート</string>
+    <string name="shortcut_new_task">新しいタスク</string>
+    <string name="share_label">日食で新しいノート</string>
+    <string name="process_text_label">日食にメモ</string>
+    <string name="tile_diary">今日の日記</string>
+    <string name="tile_diary_subtitle">日食</string>
+</resources>

@@ -1,0 +1,103 @@
+/* Design tokens. Warm paper tones; the accent is the orange of manuscript
+   paper (原稿用紙) grid lines. */
+
+:root {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo UI", system-ui, sans-serif;
+  --font-serif: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", "BIZ UDPMincho", serif;
+  --font-sans: "Yu Gothic", "YuGothic", "Hiragino Sans", "Noto Sans JP", "BIZ UDPGothic", sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", "BIZ UDGothic", monospace;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --sidebar-w: 248px;
+  --list-w: 308px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  color-scheme: light;
+  --bg: #faf9f5;
+  --bg-sidebar: #f3f1ea;
+  --bg-list: #f8f6f0;
+  --bg-elev: #ffffff;
+  --bg-hover: #ece9e0;
+  --bg-active: #e6e1d5;
+  --bg-input: #ffffff;
+  --text: #2c2a26;
+  --text-2: #69645b;
+  --text-3: #9b958b;
+  --border: #e6e2d8;
+  --border-strong: #d6d0c3;
+  --accent: #d9622b;
+  --accent-hover: #c4551f;
+  --accent-soft: #f7e4d7;
+  --accent-text: #b04c1b;
+  --on-accent: #ffffff;
+  --grid: rgba(217, 98, 43, 0.32);
+  --grid-soft: rgba(217, 98, 43, 0.12);
+  --danger: #c2412d;
+  --success: #4f8a4b;
+  --shadow: 0 1px 2px rgba(60, 45, 20, 0.06), 0 8px 28px rgba(60, 45, 20, 0.1);
+  --shadow-s: 0 1px 2px rgba(60, 45, 20, 0.08);
+  --selection: rgba(217, 98, 43, 0.2);
+  --mark: rgba(244, 196, 80, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #262522;
+    --bg-sidebar: #1f1e1b;
+    --bg-list: #23221f;
+    --bg-elev: #2f2d29;
+    --bg-hover: #34322d;
+    --bg-active: #3c3933;
+    --bg-input: #2b2a26;
+    --text: #ece8e0;
+    --text-2: #b4ada1;
+    --text-3: #847e74;
+    --border: #36342f;
+    --border-strong: #46433c;
+    --accent: #e7804b;
+    --accent-hover: #f0915e;
+    --accent-soft: #4a3226;
+    --accent-text: #f0a073;
+    --on-accent: #1f1611;
+    --grid: rgba(231, 128, 75, 0.35);
+    --grid-soft: rgba(231, 128, 75, 0.12);
+    --danger: #e0705c;
+    --success: #7fb87a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+    --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --selection: rgba(231, 128, 75, 0.3);
+    --mark: rgba(214, 167, 60, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #262522;
+  --bg-sidebar: #1f1e1b;
+  --bg-list: #23221f;
+  --bg-elev: #2f2d29;
+  --bg-hover: #34322d;
+  --bg-active: #3c3933;
+  --bg-input: #2b2a26;
+  --text: #ece8e0;
+  --text-2: #b4ada1;
+  --text-3: #847e74;
+  --border: #36342f;
+  --border-strong: #46433c;
+  --accent: #e7804b;
+  --accent-hover: #f0915e;
+  --accent-soft: #4a3226;
+  --accent-text: #f0a073;
+  --on-accent: #1f1611;
+  --grid: rgba(231, 128, 75, 0.35);
+  --grid-soft: rgba(231, 128, 75, 0.12);
+  --danger: #e0705c;
+  --success: #7fb87a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --selection: rgba(231, 128, 75, 0.3);
+  --mark: rgba(214, 167, 60, 0.35);
+}

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Categories={{categories}}
+{{#if comment}}
+Comment={{comment}}
+Comment[ja]=書くためのノートアプリ
+{{/if}}
+Exec={{exec}}
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name={{name}}
+Name[ja]=日食
+Keywords=writing;novel;notes;diary;markdown;joplin;執筆;小説;日記;ノート;
+Terminal=false
+Type=Application

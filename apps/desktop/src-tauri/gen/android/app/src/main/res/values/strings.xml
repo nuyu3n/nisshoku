@@ -1,0 +1,35 @@
+<resources>
+    <!-- The app's name: Nisshoku, 日食 in Japanese (values-ja). -->
+    <string name="app_name">Nisshoku</string>
+    <string name="main_activity_title">Nisshoku</string>
+    <string name="widget_tasks">Tasks</string>
+    <string name="widget_tasks_description">Tasks due soon. Tap to tick them off</string>
+    <string name="widget_writing">Writing today</string>
+    <string name="widget_writing_description">What you wrote today, and your streak</string>
+    <string name="widget_diary">Diary</string>
+    <string name="widget_diary_description">Write today\'s diary entry</string>
+    <string name="widget_add_task">Add a task</string>
+    <string name="widget_complete">Mark as done</string>
+    <!-- Sample content of the widget previews. -->
+    <string name="widget_sample_task_1">Return the library books</string>
+    <string name="widget_sample_due_1">Yesterday</string>
+    <string name="widget_sample_task_2">Revise chapter 3</string>
+    <string name="widget_sample_due_2">Today</string>
+    <string name="widget_sample_task_3">Reply to the editor</string>
+    <string name="widget_sample_due_3">Today 18:00</string>
+    <string name="widget_sample_unit">chars</string>
+    <string name="widget_sample_streak">5-day streak · 760 to go</string>
+    <string name="widget_sample_date">November 5</string>
+    <string name="widget_sample_status">1,240 chars written</string>
+    <string name="widget_sample_write">Continue</string>
+    <string name="widget_sample_new_note">New note</string>
+    <!-- Launcher shortcuts, sharing, the text-selection menu and the Quick Settings tile. -->
+    <string name="shortcut_diary">Diary</string>
+    <string name="shortcut_diary_long">Today’s diary</string>
+    <string name="shortcut_new_note">New note</string>
+    <string name="shortcut_new_task">New task</string>
+    <string name="share_label">New note in Nisshoku</string>
+    <string name="process_text_label">Note in Nisshoku</string>
+    <string name="tile_diary">Diary</string>
+    <string name="tile_diary_subtitle">Nisshoku</string>
+</resources>

@@ -1,0 +1,1677 @@
+/* Tags, pins, to-dos, manual order, backlinks, the writing check, images and printing. */
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.tag-chip {
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--bg-active);
+  color: var(--text-2);
+  border: none;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+}
+button.tag-chip {
+  cursor: pointer;
+}
+button.tag-chip:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.tag-chip.big {
+  font-size: 12px;
+  line-height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+}
+.tag-chip.big small {
+  margin-left: 5px;
+  color: var(--text-3);
+}
+.tag-chip.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.tag-chip.active small {
+  color: inherit;
+  opacity: 0.8;
+}
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px 6px 4px;
+}
+.note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: -1em 0 1.4em;
+  font-family: var(--font-ui);
+}
+.tag-add {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-3);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.tag-add:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.meta-pin svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+  vertical-align: -2px;
+}
+
+/* Pins and to-dos in lists */
+.pin-mark {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+  flex: none;
+}
+.pinned-item svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+.todo-check {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: none;
+  cursor: pointer;
+}
+.note-item.done .t {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+.note-item.drop-before {
+  box-shadow: inset 0 3px 0 -1px var(--accent);
+}
+.todo-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.todo-title input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+.note-title.done {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+
+/* Links between notes */
+.prose a[href^=":/"] {
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+.prose a[href^=":/"]::before {
+  content: "↗";
+  font-size: 0.75em;
+  margin-right: 1px;
+  color: var(--accent);
+}
+.backlinks {
+  margin-top: 3em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.backlinks-title {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.backlinks-title svg {
+  width: 14px;
+  height: 14px;
+}
+.backlinks button {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--radius-s);
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+.backlinks button:hover {
+  border-color: var(--accent);
+}
+
+/* Writing check */
+.proof-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.proof-stats > div {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 6px;
+  text-align: center;
+}
+.proof-stats b {
+  display: block;
+  font-size: 15px;
+}
+.proof-stats small {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.proof-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  align-items: flex-start;
+}
+.proof-item:hover {
+  background: var(--bg-hover);
+}
+.proof-kind {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.proof-item.variant .proof-kind,
+.proof-item.ranuki .proof-kind {
+  background: rgba(194, 65, 45, 0.14);
+  color: var(--danger);
+}
+.proof-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.proof-message {
+  font-size: 12.5px;
+}
+.proof-excerpt {
+  font-size: 12px;
+  color: var(--text-3);
+  font-family: var(--font-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Images */
+.prose img {
+  display: block;
+  margin: 1em auto;
+  max-height: 70vh;
+  object-fit: contain;
+  box-shadow: var(--shadow-s);
+}
+.prose img[src=""] {
+  min-height: 60px;
+  min-width: 120px;
+  background: var(--bg-hover);
+}
+.prose img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+/* Printing: just the note. */
+@media print {
+  .sidebar,
+  .note-list,
+  .editor-top,
+  .status-bar,
+  .side-panel,
+  .bubble,
+  .table-tools,
+  .find-bar,
+  .toasts,
+  .note-meta,
+  .note-tags,
+  .backlinks,
+  .notice,
+  .drawer-backdrop,
+  .panel-backdrop,
+  .menu {
+    display: none !important;
+  }
+  html,
+  body,
+  #root,
+  .app,
+  .main,
+  .editor-area,
+  .editor-scroll {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .paper {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .prose .comment-mark,
+  .prose .search-hit {
+    background: none !important;
+    border: none !important;
+  }
+}
+
+/* Table size picker */
+.table-picker {
+  min-width: 0;
+  padding: 8px;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+  gap: 3px;
+  padding: 4px 2px;
+}
+.picker-grid button {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 0;
+  cursor: pointer;
+}
+.picker-grid button.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.picker-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 4px 4px 0;
+}
+
+/* Math editing */
+.math-palette {
+  margin-bottom: 8px;
+}
+.segmented.small button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.math-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.math-keys button {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--bg);
+  cursor: pointer;
+  font-family: "KaTeX_Main", var(--font-serif);
+  font-size: 14px;
+}
+.math-keys button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.math-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+  text-align: left;
+  font-family: var(--font-mono);
+}
+
+/* Locked notes */
+.lock-screen {
+  text-align: center;
+  padding: 10vh 0;
+  font-family: var(--font-ui);
+}
+.lock-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lock-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.lock-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+.lock-screen p {
+  color: var(--text-2);
+}
+.lock-wrong {
+  color: var(--danger);
+  margin-top: 10px;
+}
+
+/* Voice input */
+.status-bar .recording {
+  color: var(--danger);
+}
+.status-bar .recording svg {
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Attachments */
+.prose a[href^=":/"] {
+  white-space: nowrap;
+}
+.viewer-overlay {
+  padding-top: 3vh;
+}
+.dialog.viewer {
+  width: min(1000px, calc(100vw - 32px));
+  height: 92vh;
+  max-height: none;
+}
+.dialog.viewer iframe {
+  flex: 1;
+  border: none;
+  background: #525659;
+}
+
+/* The year of writing */
+.year-calendar {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding: 4px 0 6px;
+}
+.year-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.year-day {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--bg-active);
+  display: inline-block;
+  position: relative;
+}
+.year-day.l1 { background: color-mix(in srgb, var(--accent) 25%, var(--bg-active)); }
+.year-day.l2 { background: color-mix(in srgb, var(--accent) 50%, var(--bg-active)); }
+.year-day.l3 { background: color-mix(in srgb, var(--accent) 75%, var(--bg-active)); }
+.year-day.l4 { background: var(--accent); }
+.year-day.lx { background: transparent; }
+.year-day.goal::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+}
+.year-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Diary: a tab of the sidebar, like the notebooks. */
+
+.diary-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 4px 12px;
+}
+/* (In the note list, not the sidebar: the cards line up with each other.) */
+.diary-side .calendar {
+  margin: 0;
+}
+.diary-side .calendar-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.diary-side .diary-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.calendar-title {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.calendar-title:hover {
+  background: var(--bg-hover);
+}
+.day .day-mood {
+  font-size: 13px;
+  line-height: 1;
+}
+.day.mood::after {
+  display: none;
+}
+.diary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.diary-stats > div {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  text-align: center;
+  padding: 5px 2px;
+}
+.diary-stats b {
+  display: block;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.diary-stats small {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.diary-search {
+  margin: 0;
+}
+.on-this-day {
+  background: var(--accent-soft);
+  border-radius: var(--radius-m);
+  padding: 2px 4px 6px;
+}
+.on-this-day .section-head {
+  margin-top: 4px;
+  color: var(--accent-text);
+}
+.diary-group .section-head {
+  margin-top: 4px;
+}
+.diary-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.diary-entry:hover {
+  background: var(--bg-hover);
+}
+.diary-entry.active {
+  background: var(--bg-elev);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.entry-day {
+  width: 30px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+.entry-day b {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.entry-day small {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.entry-day small.sun {
+  color: var(--danger);
+}
+.entry-date {
+  font-size: 11.5px;
+  color: var(--accent-text);
+  flex: none;
+  width: 52px;
+}
+.entry-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.entry-marks {
+  flex: none;
+  font-size: 13px;
+}
+
+/* The page of an entry */
+.diary-head {
+  font-family: var(--font-ui);
+  margin: 0 0 1.6em;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.diary-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+}
+.diary-date-row .icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+.diary-date {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.diary-date:hover {
+  background: var(--bg-hover);
+}
+.diary-date-main {
+  display: block;
+  font-family: var(--editor-font);
+  font-size: 1.7em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+.diary-date-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.today-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.diary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  background: var(--bg-elev);
+}
+/* The label stays with the first row when the choices wrap. */
+.meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.meta-label {
+  flex: none;
+  /* Fits "Weather" in English too; the choices of both rows still line up. */
+  min-width: 4.6em;
+  white-space: nowrap;
+  line-height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.meta-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.meta-choice {
+  --c: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.meta-choice svg {
+  width: 17px;
+  height: 17px;
+  color: var(--text-3);
+  transition: color 0.12s;
+}
+.meta-choice:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.meta-choice:hover:not(:disabled) svg {
+  color: var(--c);
+}
+.meta-choice.on {
+  border-color: color-mix(in srgb, var(--c) 45%, transparent);
+  background: color-mix(in srgb, var(--c) 13%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+.meta-choice.on svg {
+  color: var(--c);
+}
+.meta-choice:disabled {
+  cursor: default;
+}
+.meta-choice:disabled:not(.on) {
+  opacity: 0.5;
+}
+.diary-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.events-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.events-title svg {
+  width: 14px;
+  height: 14px;
+}
+.event-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 8px;
+  border-radius: var(--radius-s);
+  position: relative;
+}
+.event-row:hover {
+  background: var(--bg-hover);
+}
+.event-time {
+  flex: none;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text);
+  font-weight: 600;
+  width: 3.2em;
+}
+.event-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.event-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.event-add .input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+}
+.event-add .event-time-input {
+  flex: none;
+  width: 92px;
+  font-variant-numeric: tabular-nums;
+}
+.memo-delete {
+  flex: none;
+  /* Beside the first line, however many the text wraps to. */
+  align-self: flex-start;
+  margin-top: -1px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.memo-delete svg {
+  width: 13px;
+  height: 13px;
+}
+.event-row:hover .memo-delete,
+.memo-item:hover .memo-delete,
+.memo-delete:focus-visible {
+  opacity: 1;
+}
+.memo-delete:hover {
+  background: var(--bg-active);
+  color: var(--danger);
+}
+@media (hover: none) {
+  .memo-delete {
+    opacity: 1;
+  }
+}
+
+/* Sidebar cards: memo, on this day */
+.side-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-elev);
+  padding: 4px 6px 8px;
+}
+.side-card.accent {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.side-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  padding: 6px 4px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.side-card-head.static {
+  cursor: default;
+}
+.side-card.accent .side-card-head {
+  color: var(--accent-text);
+}
+.side-card-head svg {
+  width: 14px;
+  height: 14px;
+}
+.side-card-head .count {
+  font-size: 11px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  text-align: center;
+}
+.side-card-head .fold {
+  transition: transform 0.15s;
+  color: var(--text-3);
+}
+.side-card-head .fold.closed {
+  transform: rotate(-90deg);
+}
+.memo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 4px;
+  border-radius: 6px;
+}
+.memo-item:hover {
+  background: var(--bg-hover);
+}
+.memo-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex: none;
+}
+.memo-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.memo-item.done .memo-text {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.memo-input {
+  width: 100%;
+  height: 30px;
+  margin-top: 4px;
+  font-size: 12.5px;
+}
+.link-btn {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px 4px 0;
+}
+.link-btn:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+.entry-ago {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-text);
+  width: 3.6em;
+  padding-top: 1px;
+}
+
+/* Entries in the list */
+.entry-day {
+  position: relative;
+}
+.entry-day::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--dot, transparent);
+}
+.entry-day small.sat {
+  color: #3f73b5;
+}
+.entry-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.entry-body .entry-text {
+  color: var(--text);
+}
+.entry-marks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.entry-marks .mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.entry-marks svg {
+  width: 13px;
+  height: 13px;
+}
+.day.has::after {
+  background: var(--dot, var(--accent));
+}
+.day.selected::after {
+  background: var(--on-accent);
+}
+
+/* Disabled icon buttons look disabled. */
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.diary-text {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-family: var(--editor-font);
+  font-size: 1em;
+  line-height: var(--editor-line, 1.95);
+  letter-spacing: 0.03em;
+  color: var(--text);
+  overflow: hidden;
+  user-select: text;
+  padding: 0;
+}
+.diary-text::placeholder {
+  color: var(--text-3);
+}
+
+.note-title.gone,
+.note-meta.gone,
+.note-tags.gone {
+  display: none !important;
+}
+.event-add .input {
+  font-size: 13px;
+  padding: 0 10px;
+}
+.event-add .event-time-input {
+  width: 92px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+.event-time-input svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+.diary-head,
+.diary-meta,
+.meta-row,
+.meta-choices,
+.diary-events,
+.event-add {
+  min-width: 0;
+  max-width: 100%;
+}
+.meta-choices {
+  flex: 1;
+}
+@media (max-width: 719px) {
+  .meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .meta-choice {
+    padding: 0 9px 0 7px;
+    height: 32px;
+  }
+  .diary-date-main {
+    font-size: 1.5em;
+  }
+}
+/* Wide sidebars (phones): the calendar keeps compact rows. */
+.diary-side .day {
+  aspect-ratio: auto;
+  height: 34px;
+}
+
+/* Date and time pickers (components/Pickers.tsx), inside a dialog. */
+.calendar.picker {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.calendar.picker .calendar-head .icon-btn {
+  width: 34px;
+  height: 34px;
+}
+/* Fixed-size cells: square ones grow with the dialog's width (55px+). */
+.calendar.picker .day {
+  font-size: 14px;
+  aspect-ratio: auto;
+  justify-self: center;
+  width: min(100%, 40px);
+  height: 36px;
+}
+@media (pointer: coarse) {
+  .calendar.picker .day {
+    width: min(100%, 44px);
+    height: 42px;
+    font-size: 15px;
+  }
+}
+.calendar.picker .day:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.picker-months,
+.picker-hours,
+.picker-minutes {
+  display: grid;
+  gap: 4px;
+}
+.picker-months,
+.picker-minutes {
+  grid-template-columns: repeat(4, 1fr);
+}
+.picker-hours {
+  grid-template-columns: repeat(6, 1fr);
+}
+/* Hours and minutes take the same height, so that the dialog stays put. */
+.picker-hours,
+.picker-minutes {
+  min-height: 172px;
+  align-content: start;
+}
+.picker-cell {
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.picker-cell:hover {
+  background: var(--bg-hover);
+}
+.picker-cell.now {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.picker-cell.on {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.picker-cell:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.time-display {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.time-display button {
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.time-display button.on {
+  background: var(--accent-soft, var(--bg-active));
+  color: var(--accent-text);
+}
+.picker-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+.picker-foot .btn {
+  height: 30px;
+  padding: 0 12px;
+}
+.picker-foot .nudge {
+  display: flex;
+  gap: 6px;
+}
+
+/* Tasks (components/Tasks.tsx): the to-dos view of the note list. */
+.task-list {
+  padding: 0 4px 24px;
+}
+.task-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 4px 12px;
+  padding: 0 6px 0 12px;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  background: var(--bg-elev);
+}
+.task-add:focus-within {
+  border-color: var(--accent);
+}
+.task-add > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+  flex: none;
+}
+.task-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 0;
+}
+.task-add-btn {
+  height: 30px;
+  padding: 0 12px;
+}
+.task-group h4,
+.task-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.task-group h4 .count,
+.task-group-toggle .count {
+  font-weight: 400;
+}
+.task-group.overdue h4 {
+  color: var(--danger);
+}
+.task-group.today h4 {
+  color: var(--accent-text);
+}
+.task-group-toggle {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.task-group-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-radius: var(--radius-m);
+  transition: opacity 0.3s;
+}
+.task-row:hover {
+  background: var(--bg-hover);
+}
+.task-row.active {
+  background: var(--bg-active);
+}
+.task-check {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: transparent;
+}
+/* The ring, drawn inside the 40px touch target. */
+.task-check svg {
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  border: 1.6px solid var(--text-3);
+  border-radius: 50%;
+  stroke-width: 2.6;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.task-check:hover svg {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.task-row.done .task-check svg {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.task-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.task-title {
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.task-title.untitled {
+  color: var(--text-3);
+}
+.task-sub {
+  max-width: 100%;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-row.done .task-title {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+/* Just ticked, about to move to "Done". */
+.task-group:not(.done) .task-row.done {
+  opacity: 0.55;
+}
+.due-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.due-chip svg {
+  width: 12px;
+  height: 12px;
+}
+.due-chip.unset {
+  border-style: dashed;
+  color: var(--text-3);
+}
+.task-row .due-chip.unset {
+  border-color: transparent;
+  background: transparent;
+  opacity: 0;
+}
+.task-row:hover .due-chip.unset,
+.task-row .due-chip.unset:focus-visible {
+  opacity: 1;
+}
+.due-chip.overdue {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+.note-item .m .due {
+  color: var(--accent-text);
+}
+.note-item .m .due.overdue {
+  color: var(--danger);
+}
+.todo-title .due-chip {
+  margin-left: 6px;
+}
+@media (hover: none) {
+  /* No hover on phones: the "add a due date" chip is always shown, quietly. */
+  .task-row .due-chip.unset {
+    opacity: 0.6;
+  }
+}
+
+/* Phones: formatting above the keyboard (EditorParts.tsx MobileFormatBar); it takes the status bar's place. */
+.format-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 4px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.format-scroll {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.format-scroll::-webkit-scrollbar {
+  display: none;
+}
+.format-bar > button {
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  margin-left: 2px;
+}
+.format-bar button {
+  flex: none;
+  min-width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+}
+.format-bar button svg {
+  width: 20px;
+  height: 20px;
+}
+.format-bar button.on {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.main:has(.format-bar) .status-bar {
+  display: none;
+}
+
+/* Line numbers ------------------------------------------------------------ */
+
+.paper.with-lines {
+  padding-left: 68px;
+  max-width: calc(var(--text-width, 38) * 1em + 108px);
+}
+.app.layout-narrow .paper.with-lines {
+  padding-left: 46px;
+}
+/* Rich text: numbers measured from the paragraphs, in the left margin. */
+.paper > div:has(> .line-gutter) {
+  position: relative;
+}
+.line-gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.line-gutter > span {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  font-family: var(--font-ui);
+  font-size: 0.66em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--text-3);
+  opacity: 0.75;
+  white-space: nowrap;
+  transition: color 0.15s, opacity 0.15s;
+}
+.line-gutter > span.current {
+  color: var(--accent-text);
+  opacity: 1;
+  font-weight: 600;
+}
+.app.layout-narrow .line-gutter > span {
+  right: 10px;
+}
+
+/* Plain text: a copy of the text behind the textarea, one block per line,
+   so that the numbers follow wrapped lines. */
+.text-lines {
+  position: relative;
+}
+.text-lines.numbered > textarea {
+  position: relative;
+  padding: 2px 0;
+}
+.line-mirror {
+  position: absolute;
+  inset: 0;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 2px 0;
+  overflow: visible !important;
+  color: transparent !important;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  pointer-events: none;
+  user-select: none;
+  counter-reset: ln;
+}
+.line-mirror::placeholder {
+  color: transparent;
+}
+.line-mirror > div {
+  position: relative;
+  counter-increment: ln;
+  border-radius: 3px;
+}
+.line-mirror > div::before {
+  content: counter(ln);
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: 16px;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--text-3);
+  opacity: 0.75;
+  transform: scale(0.72);
+  transform-origin: right center;
+  white-space: nowrap;
+}
+.app.layout-narrow .line-mirror > div::before {
+  margin-right: 10px;
+}
+.line-mirror > div.current {
+  background: var(--grid-soft);
+  box-shadow: -6px 0 0 var(--grid-soft), 6px 0 0 var(--grid-soft);
+}
+.line-mirror > div.current::before {
+  color: var(--accent-text);
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Back / forward between notes */
+.nav-buttons {
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Settings → Updates */
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.about-head img {
+  border-radius: 14px;
+  flex: none;
+}
+.about-head b {
+  display: block;
+  font-size: 18px;
+}
+.about-head small {
+  color: var(--text-3);
+}
+.update-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  background: var(--bg-elev);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.update-card.available {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--grid-soft);
+}
+.update-status span {
+  font-weight: 600;
+}
+.update-card.error .update-status span {
+  color: var(--danger, #c2412d);
+}
+.update-status small {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.update-card .hint {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  margin-top: 8px;
+}
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.release-notes {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.release-notes h5 {
+  margin: 8px 0 2px;
+  font-size: 13px;
+}
+.release-notes p {
+  margin: 4px 0;
+}
+.release-notes ul {
+  margin: 2px 0 4px;
+  padding-left: 1.3em;
+}
+
+/* One-line inputs that add a line (memo, events): AddInput.tsx */
+.add-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.add-input > .input {
+  flex: 1;
+  min-width: 0;
+}
+.add-input-btn {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+}
+.add-input-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.add-input-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.memo-add {
+  margin-top: 4px;
+}
+.memo-add .memo-input {
+  margin-top: 0;
+}
+@media (pointer: coarse) {
+  .add-input-btn {
+    height: 40px;
+    min-width: 40px;
+  }
+  .memo-add .memo-input {
+    height: 40px;
+    font-size: 15px;
+  }
+}
+.add-input > .event-time-input {
+  flex: none;
+}

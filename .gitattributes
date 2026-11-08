@@ -1,0 +1,3 @@
+# Test fixtures are compared byte for byte (some mix line endings on purpose):
+# never convert them.
+crates/*/tests/data/** -text

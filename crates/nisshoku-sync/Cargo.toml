@@ -1,0 +1,38 @@
+[package]
+name = "nisshoku-sync"
+version.workspace = true
+edition.workspace = true
+description = "Joplin-compatible synchronization engine"
+
+[dependencies]
+aes = "0.9.4"
+aes-gcm = "0.11.1"
+async-trait = "0.1.92"
+base64 = "0.23.1"
+ccm = "0.6.1"
+chrono = "0.4.45"
+futures-util = "0.3.34"
+getrandom = "0.4.3"
+hmac = "0.13.0"
+httpdate = "1.0.3"
+nisshoku-core = { path = "../nisshoku-core" }
+pbkdf2 = "0.13.0"
+percent-encoding = "2.3.2"
+quick-xml = "0.42.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "stream", "json", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["fs", "rt", "macros", "sync", "time", "io-util", "net"] }
+tracing = "0.1.44"
+uuid = { version = "1.29.0", features = ["v4"] }
+
+[dev-dependencies]
+axum = "0.8.9"
+base64 = "0.23.1"
+httpdate = "1.0.3"
+percent-encoding = "2.3.2"
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }

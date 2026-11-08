@@ -1,0 +1,13 @@
+/target
+node_modules/
+dist/
+
+# Sign-in tokens for tests against real services
+.gdrive-token.txt
+.onedrive-token.txt
+.env.test
+
+client_secret_1060508343832-8lq46vu6rr2rudtbn9g321vpnvp8lhes.apps.googleusercontent.com.json
+
+# Installers gathered by scripts/collect-builds.mjs
+/builds

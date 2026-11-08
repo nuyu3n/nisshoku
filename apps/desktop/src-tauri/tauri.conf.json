@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nisshoku",
+  "mainBinaryName": "nisshoku",
+  "version": "0.2.0",
+  "identifier": "app.nisshoku.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Nisshoku",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 760,
+        "minHeight": 520,
+        "decorations": false,
+        "shadow": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https: http:; font-src 'self' data:; frame-src asset: http://asset.localhost; object-src asset: http://asset.localhost; media-src asset: http://asset.localhost; connect-src ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/resources/**",
+          "$APPLOCALDATA/resources/**"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDQTFDOTkyNDg3Nzg0NTIKUldSU2hIZElrc21ockk5Mzl5MWdvekY4eDA1RjYzSWNKbVRHZFRWR2xGeHVvRDMxQ055OU15YXYK",
+      "endpoints": ["https://github.com/nuyu3n/nisshoku/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "publisher": "Nisshoku",
+    "copyright": "© 2026 Nisshoku",
+    "category": "Productivity",
+    "homepage": "https://github.com/nuyu3n/nisshoku",
+    "shortDescription": "A quiet place to write: novels, notes and a diary",
+    "longDescription": "日食は、小説や日記を書くためのノートアプリです。Joplin と互換の同期（Nextcloud・OneDrive・Google Drive・ローカルフォルダ、エンドツーエンド暗号化）に対応しています。",
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper" },
+      "wix": { "language": ["ja-JP", "en-US"], "upgradeCode": "60b01a55-47dc-5890-9c23-56475257d619" },
+      "nsis": {
+        "languages": ["Japanese", "English"],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp",
+        "installerHooks": "installer/hooks.nsh"
+      }
+    },
+    "linux": {
+      "appimage": { "bundleMediaFramework": false },
+      "deb": { "section": "editors" },
+      "rpm": { "release": "1" }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

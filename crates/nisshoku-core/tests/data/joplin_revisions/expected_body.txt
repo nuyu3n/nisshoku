@@ -1,0 +1,6 @@
+全面的に🌘書き直した本文。
+
+新しい段落を少し変更。
+三段落目
+literal backslash-n: \n | backslash-r: \r | lone backslash: \ | double: \\n | quote: " | CRLF:
+end | tab:	here

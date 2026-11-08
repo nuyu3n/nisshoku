@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row"
+    android:layout_width="match_parent"
+    android:layout_height="44dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <ImageView
+        android:id="@+id/check"
+        android:layout_width="40dp"
+        android:layout_height="44dp"
+        android:contentDescription="@string/widget_complete"
+        android:scaleType="center"
+        android:src="@drawable/widget_check" />
+
+    <TextView
+        android:id="@+id/task_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+
+    <!-- One of the two is shown, so that the colours follow the launcher's theme. -->
+    <TextView
+        android:id="@+id/due"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="6dp"
+        android:textColor="@color/widget_text_2"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/due_overdue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingStart="8dp"
+        android:paddingEnd="6dp"
+        android:textColor="@color/widget_danger"
+        android:textSize="12sp"
+        android:visibility="gone" />
+</LinearLayout>

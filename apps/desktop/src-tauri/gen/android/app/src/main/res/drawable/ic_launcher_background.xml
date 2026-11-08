@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The night sky of src-tauri/icons/source.svg, with its stars. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path android:pathData="M0,0h1024v1024h-1024z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="410"
+                android:endY="1024">
+                <item android:offset="0" android:color="#FF2E2540" />
+                <item android:offset="1" android:color="#FF16121E" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#CCF4E6CF" android:pathData="M243,290a7,7 0 1,0 14,0a7,7 0 1,0 -14,0z" />
+    <path android:fillColor="#99F4E6CF" android:pathData="M775,232a5,5 0 1,0 10,0a5,5 0 1,0 -10,0z" />
+    <path android:fillColor="#73F4E6CF" android:pathData="M800,770a6,6 0 1,0 12,0a6,6 0 1,0 -12,0z" />
+</vector>
