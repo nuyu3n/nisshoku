@@ -399,6 +399,32 @@ export function noteMenu(note: NoteSummary): MenuItem[] {
   ];
 }
 
+/** Colours for notebooks: readable as text and icon on both themes. */
+export const FOLDER_COLORS: [string, string, string][] = [
+  ["#d0453a", "赤", "Red"],
+  ["#d97757", "オレンジ", "Orange"],
+  ["#c49a1a", "黄", "Yellow"],
+  ["#3a9a5b", "緑", "Green"],
+  ["#2a9d8f", "青緑", "Teal"],
+  ["#3b7dd8", "青", "Blue"],
+  ["#5b5bd6", "藍", "Indigo"],
+  ["#9b59b6", "紫", "Purple"],
+  ["#d6589b", "桃", "Pink"],
+  ["#8a8578", "灰", "Gray"],
+];
+
+function colorMenu(folder: Folder): MenuItem[] {
+  const set = (color: string | null) => async () => {
+    await api.setFolderColor(folder.id, color).catch(report);
+    await store().loadFolders();
+  };
+  return [
+    { label: L("色なし", "No colour"), icon: "x", checked: !folder.color, run: set(null) },
+    "sep",
+    ...FOLDER_COLORS.map(([hex, ja, en]): MenuItem => ({ label: L(ja, en), swatch: hex, checked: folder.color === hex, run: set(hex) })),
+  ];
+}
+
 export async function chooseIcon(folder: Folder) {
   const picked = await dialogs.emoji(t("folder.icon"), folder.icon ?? "");
   if (picked === null) return;
@@ -459,6 +485,7 @@ export function folderMenu(folder: Folder): MenuItem[] {
       : { label: t("work.make"), icon: "work", disabled: folder.isDiary, run: () => void import("./works").then((w) => w.makeWork(folder)) },
     { label: t("folder.rename"), icon: "pen", run: () => renameFolder(folder) },
     { label: t("folder.icon"), icon: "star", run: () => chooseIcon(folder) },
+    { label: L("色", "Colour"), icon: "palette", submenu: colorMenu(folder) },
     {
       label: t("menu.move"),
       icon: "move",

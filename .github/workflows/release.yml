@@ -1,4 +1,4 @@
-# Builds 日食 for Windows, Linux and Android and publishes a GitHub release.
+# Builds 日色 for Windows, Linux and Android and publishes a GitHub release.
 #
 # Start it by pushing a tag `v<version>` matching the version in
 # tauri.conf.json (scripts/bump-version.mjs sets it), or by hand from the
@@ -83,7 +83,7 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           tagName: ${{ env.TAG }}
-          releaseName: "日食 __VERSION__"
+          releaseName: "日色 __VERSION__"
           releaseBody: |
             ## ダウンロード
             - **Windows**: `Nisshoku_*_x64-setup.exe`（管理者権限なしで入ります）

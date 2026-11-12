@@ -1,5 +1,5 @@
 <resources>
-    <!-- The app's name: Nisshoku, 日食 in Japanese (values-ja). -->
+    <!-- The app's name: Nisshoku, 日色 in Japanese (values-ja). -->
     <string name="app_name">Nisshoku</string>
     <string name="main_activity_title">Nisshoku</string>
     <string name="widget_tasks">Tasks</string>

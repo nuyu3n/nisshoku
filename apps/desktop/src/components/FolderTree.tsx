@@ -285,7 +285,8 @@ function Row({ folder, tree, depth, shown, query, collapsed, activeId }: LevelPr
         >
           {hasChildren && <Icon name="chevronRight" />}
         </span>
-        {folder.icon ? <span className="emoji">{folder.icon}</span> : <Icon name={folder.isWork ? "work" : "folder"} />}
+        {folder.icon ? <span className="emoji">{folder.icon}</span> : <Icon name={folder.isWork ? "work" : "folder"} style={folder.color ? { color: folder.color } : undefined} />}
+        {folder.color && folder.icon && <span className="folder-dot" style={{ background: folder.color }} />}
         <span className="label" title={title.length > 12 ? title : undefined}>
           <Highlight text={title} query={query} />
         </span>

@@ -537,6 +537,14 @@
   .overlay > .dialog:not(.large):not(.viewer) {
     align-self: center;
   }
+  /* Dialogs to type in: from a fixed place near the top, not centred. The
+     keyboard they bring up shrinks the screen, which moved a centred dialog
+     up a moment after it opened. */
+  .overlay > .dialog:not(.large):not(.viewer):has(input:not([type="checkbox"]):not([type="radio"]), textarea, .math-field) {
+    align-self: flex-start;
+    margin-top: 16px;
+    max-height: calc(100% - 32px);
+  }
   .overlay > .dialog.palette {
     align-self: flex-start;
     margin-top: 10px;

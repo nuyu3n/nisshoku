@@ -52,11 +52,19 @@ export const TextLines = forwardRef<TextLinesHandle, Props>(function TextLines({
     const el = ref.current;
     if (!el) return;
     if (reset) {
-      const scroller = el.closest(".editor-scroll");
-      const keep = scroller?.scrollTop ?? 0;
-      el.style.height = "auto";
-      el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
-      if (scroller) scroller.scrollTop = keep;
+      // Measured on a hidden copy: collapsing the textarea itself for a
+      // moment (height auto) while it has the focus moved the caret and,
+      // on phones, could close the keyboard.
+      const copy = el.cloneNode() as HTMLTextAreaElement;
+      copy.value = el.value;
+      copy.removeAttribute("id");
+      copy.tabIndex = -1;
+      copy.setAttribute("aria-hidden", "true");
+      Object.assign(copy.style, { position: "absolute", visibility: "hidden", pointerEvents: "none", height: "auto", width: `${el.clientWidth}px`, left: "-9999px", top: "0" });
+      el.parentElement?.appendChild(copy);
+      const needed = copy.scrollHeight;
+      copy.remove();
+      el.style.height = `${Math.max(needed, minHeight)}px`;
     } else if (el.scrollHeight > el.clientHeight) {
       el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
     }

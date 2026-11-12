@@ -12,11 +12,12 @@ import { startWorkSync } from "./lib/works";
 import { cancelDialog, DialogHost } from "./components/Dialogs";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AttachmentViewer } from "./components/Viewer";
-import { closeMenu, MenuHost, openMenu } from "./components/ContextMenu";
+import { closeMenu, isTextLongPress, MenuHost, openMenu } from "./components/ContextMenu";
 import { flush, inputMenu } from "./lib/actions";
 import { loadResources, refreshImages } from "./editor/images";
 import { layoutFor } from "./store";
 import { isoDate } from "./api";
+import { watchForeground } from "./lib/autosync";
 import { isMobile, useBackButton, useSystemInsets } from "./lib/mobile";
 import { TooltipHost } from "./components/Tooltip";
 import { startUpdateChecks } from "./lib/updates";
@@ -67,6 +68,8 @@ function useLayout() {
 function useContextMenus() {
   useEffect(() => {
     const onMenu = (e: MouseEvent) => {
+      // Phones: a long press in text selects it, with the system's bar.
+      if (isTextLongPress(e)) return;
       e.preventDefault();
       const el = e.target as HTMLElement;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) openMenu(e, inputMenu(el));
@@ -80,7 +83,7 @@ function useContextMenus() {
 function useAppTitle() {
   const language = useStore((s) => s.prefs.language);
   useEffect(() => {
-    const name = language === "en" ? "Nisshoku" : "日食";
+    const name = language === "en" ? "Nisshoku" : "日色";
     document.title = name;
     if (!isTauri || isMobile) return;
     void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTitle(name).catch(() => {}));
@@ -340,6 +343,7 @@ export function App() {
       const sync = await api.getSyncSettings().catch(report);
       if (sync) s.set({ syncStatus: sync.status });
       startAndroidBridge();
+      watchForeground();
       startUpdateChecks();
       startWorkSync();
       if (!isTauri) await previewState();

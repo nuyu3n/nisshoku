@@ -1037,14 +1037,23 @@ textarea.input {
   gap: 0.5em;
   align-items: flex-start;
 }
+/* The box sits in the middle of the item's first line, whatever the font
+   size and line height (a fixed offset drifted with them). */
 .prose ul[data-type="taskList"] li > label {
-  margin-top: 0.42em;
   flex: none;
+  display: flex;
+  align-items: center;
+  height: calc(var(--editor-line, 1.95) * 1em);
+  margin-top: 0.1em;
 }
 .prose ul[data-type="taskList"] li > label input {
   accent-color: var(--accent);
   width: 1em;
   height: 1em;
+  vertical-align: middle;
+}
+.prose ul[data-type="taskList"] li > div > p {
+  margin: 0.1em 0;
 }
 .prose ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--text-3);
@@ -1111,6 +1120,13 @@ textarea.input {
 }
 .prose th {
   background: var(--bg-sidebar);
+}
+.app.mobile .prose > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: var(--empty-placeholder);
+  color: var(--text-3);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 .prose p.is-editor-empty:first-child::before,
 .prose .is-empty::before {

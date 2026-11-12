@@ -35,6 +35,8 @@ pub struct FolderDto {
     title: String,
     parent_id: String,
     icon: String,
+    /// A colour of the user's (`#rrggbb`), or empty.
+    color: String,
     is_diary: bool,
     is_work: bool,
     note_count: usize,
@@ -193,6 +195,32 @@ fn icon_emoji(icon: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// A notebook's colour, kept in its `user_data` (Joplin keeps and syncs it).
+fn folder_color(f: &Folder) -> Option<String> {
+    userdata::get(&f.user_data, "color")
+        .and_then(|v| v.as_str().map(str::to_string))
+        .filter(|c| is_hex_color(c))
+}
+
+fn is_hex_color(c: &str) -> bool {
+    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|x| x.is_ascii_hexdigit())
+}
+
+/// Sets (or, with `None`, removes) a notebook's colour.
+#[tauri::command]
+pub fn set_folder_color(state: State<'_, AppState>, id: String, color: Option<String>) -> CmdResult<()> {
+    let db = state.db();
+    let mut f = load_folder(&db, &id)?;
+    let color = color.map(|c| c.trim().to_lowercase()).filter(|c| !c.is_empty());
+    if let Some(c) = &color
+        && !is_hex_color(c)
+    {
+        return Err(format!("not a colour: {c}"));
+    }
+    f.user_data = userdata::set(&f.user_data, "color", color.map(|c| json!(c)));
+    db.save_meta(&mut f).map_err(err)
+}
+
 fn is_diary(f: &Folder) -> bool {
     userdata::get(&f.user_data, DIARY_KEY).and_then(|v| v.as_bool()) == Some(true)
 }
@@ -231,6 +259,7 @@ pub fn list_folders(state: State<'_, AppState>) -> CmdResult<Vec<FolderDto>> {
             title: f.title.clone(),
             parent_id: f.parent_id.clone(),
             icon: icon_emoji(&f.icon).unwrap_or_default(),
+            color: folder_color(f).unwrap_or_default(),
             is_diary: is_diary(f),
             is_work: crate::works::is_work(f),
             note_count: counts.get(&f.id).copied().unwrap_or(0),

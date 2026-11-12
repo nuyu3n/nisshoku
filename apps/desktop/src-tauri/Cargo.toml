@@ -2,7 +2,7 @@
 name = "nisshoku-app"
 version.workspace = true
 edition.workspace = true
-description = "日食 — a writing app"
+description = "日色 — a writing app"
 
 [lib]
 name = "nisshoku_app_lib"

@@ -266,7 +266,7 @@ object Widgets {
     views.setViewVisibility(R.id.empty, if (shown == 0) View.VISIBLE else View.GONE)
     views.setTextViewText(
       R.id.empty,
-      if (s.json == null) s.t("日食を開くと表示されます", "Open Nisshoku to show your tasks")
+      if (s.json == null) s.t("日色を開くと表示されます", "Open Nisshoku to show your tasks")
       else s.t("タスクはありません 🎉", "Nothing to do 🎉"),
     )
     return views

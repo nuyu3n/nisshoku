@@ -123,12 +123,29 @@ fn to_stat(path: String, meta: &std::fs::Metadata) -> RemoteStat {
 }
 
 /// Sub-millisecond precision helps tell apart writes in the same millisecond.
+///
+/// Linux file systems keep times in coarse steps (the kernel tick, a few
+/// milliseconds), so two writes of the same size in a row can share both. As
+/// every write replaces the file (a new file renamed over it, see
+/// `write_file_atomic`), the file's inode and change time tell them apart there.
 fn version_of(meta: &std::fs::Metadata) -> String {
     let nanos = meta
         .modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_nanos());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        format!(
+            "{nanos}-{}-{}-{}.{}",
+            meta.len(),
+            meta.ino(),
+            meta.ctime(),
+            meta.ctime_nsec()
+        )
+    }
+    #[cfg(not(unix))]
     format!("{nanos}-{}", meta.len())
 }
 

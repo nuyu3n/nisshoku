@@ -1752,3 +1752,92 @@ button.tag-chip:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The math preview: tall formulas (fractions, sums with limits) are not cut
+   and get no vertical scrollbar (`overflow-x: auto` makes the other axis
+   scroll too, and KaTeX draws parts outside its boxes). */
+.math-preview {
+  overflow-y: hidden;
+  padding-block: 16px;
+}
+.math-preview .katex-display {
+  margin: 0;
+}
+.math-preview .katex {
+  white-space: nowrap;
+}
+.prose [data-type="block-math"],
+.prose [data-type="inline-math"] {
+  overflow-y: hidden;
+}
+
+/* Math on phones: what it looks like and the text first (the keyboard
+   covers the bottom), the keys below, larger, their groups scrolling. */
+.app.mobile .dialog-body:has(> .math-palette) {
+  display: flex;
+  flex-direction: column;
+}
+.app.mobile .dialog-body:has(> .math-palette) > .math-preview {
+  order: -2;
+  margin: 0 0 8px;
+}
+.app.mobile .dialog-body:has(> .math-palette) > textarea {
+  order: -1;
+  margin-bottom: 8px;
+  font-size: 16px; /* (smaller text makes Android zoom in) */
+}
+.app.mobile .math-palette .segmented {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+.app.mobile .math-palette .segmented button {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.app.mobile .math-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+.app.mobile .math-keys button {
+  height: 40px;
+  min-width: 0;
+  font-size: 16px;
+}
+.app.mobile .dialog:has(.math-palette) {
+  width: calc(100vw - 16px);
+}
+
+/* Notebook colours: a swatch in the colour menu, a dot beside an emoji icon. */
+.menu-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.folder-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  border-radius: 50%;
+  align-self: center;
+}
+.app.mobile .dialog-body:has(> .math-palette) > textarea {
+  height: 5.2em;
+  min-height: 3.6em;
+  resize: none;
+}
+.app.mobile .math-keys {
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+}
+.app.mobile .math-keys button {
+  white-space: nowrap;
+  font-size: 15px;
+}

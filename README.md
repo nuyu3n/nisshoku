@@ -16,7 +16,7 @@ Tauri 製の執筆アプリ。同期エンジンは Joplin の同期形式（syn
 |---|---|
 | `crates/nisshoku-core` | データモデル（ノート・ノートブック・添付・タグ・リビジョン）、Joplin 互換の直列化、SQLite、ノート履歴 |
 | `crates/nisshoku-sync` | ストレージ抽象 `RemoteStorage`、同期先ドライバ、ロック、`info.json`、エンドツーエンド暗号化、同期本体 |
-| `apps/desktop` | アプリ「日食」（Tauri 2 + React + TipTap）。Windows・Linux・Android |
+| `apps/desktop` | アプリ「日色」（Tauri 2 + React + TipTap）。Windows・Linux・Android |
 
 同期先ドライバ:
 
@@ -49,7 +49,7 @@ pnpm dev              # 画面だけをブラウザで確認（データは模�
 
 Linux（Ubuntu 22.04 以降・Debian 12 以降など）でのビルドには
 `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` が要る。AppImage を作るには `file` コマンドも要る。
-Linux のアプリ一覧での名前は、日本語環境なら「日食」（`installer/nisshoku.desktop`、`tauri.linux.conf.json`）。パスワードやトークンは
+Linux のアプリ一覧での名前は、日本語環境なら「日色」（`installer/nisshoku.desktop`、`tauri.linux.conf.json`）。パスワードやトークンは
 Secret Service（GNOME キーリング・KWallet）に保存し、それが無い環境ではプロファイルの `secrets.json`（本人だけが読める）に置く。
 
 環境変数 `NISSHOKU_PROFILE` にフォルダを指定すると、ノートをそこに置く（試すとき・USB メモリで持ち歩くとき。既定はアプリのデータフォルダ）。
@@ -69,8 +69,8 @@ pnpm tauri android build --target aarch64 --apk          # 実機用（署名付
 
 - Windows: `target/release/bundle/nsis/Nisshoku_<版>_x64-setup.exe`（管理者権限なしで `%LOCALAPPDATA%\Nisshoku` に入る。日本語・英語、WebView2 が無ければ一緒に入れる）と `target/release/bundle/msi/Nisshoku_<版>_x64_ja-JP.msi`・`_en-US.msi`。インストーラーの画像とフックは `src-tauri/installer/`
 - 名前: フォルダ・パッケージ・実行ファイルなどシステム側の名前は英字の `Nisshoku`（製品名）。人が見る名前は言語に合わせる:
-  ウィンドウのタイトルはアプリの表示言語で「日食」／「Nisshoku」、Windows のスタートメニューと「アプリ」一覧は日本語の Windows なら「日食」
-  （`installer/hooks.nsh`）、Linux のアプリ一覧は `Name[ja]=日食`、Android のアプリ名は端末（またはアプリごと）の言語で
+  ウィンドウのタイトルはアプリの表示言語で「日色」／「Nisshoku」、Windows のスタートメニューと「アプリ」一覧は日本語の Windows なら「日色」
+  （`installer/hooks.nsh`。0.3.0 までの名前「日食」のショートカットは張り直す）、Linux のアプリ一覧は `Name[ja]=日色`、Android のアプリ名は端末（またはアプリごと）の言語で
 - 0.1.0 は「日食」というフォルダ（`%LOCALAPPDATA%\日食`）に入っていた。新しいインストーラーはその古い版を（ノートと設定は残して）取り除き、ショートカットを張り直す
 - Linux: `target/release/bundle/appimage/Nisshoku_<版>_amd64.AppImage`、`deb/Nisshoku_<版>_amd64.deb`、`rpm/Nisshoku-<版>-1.x86_64.rpm`
 - Android: `apps/desktop/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`。スマホに送って開き、「提供元不明のアプリ」を許可して入れる
@@ -130,10 +130,10 @@ Android 版の違い:
   図案は `src-tauri/icons/source.svg`。`pnpm tauri icon` は `gen/android` のアイコンも上書きするので、デスクトップ用だけを作るときは `-o` で別フォルダに出してコピーする
 - ファイルの書き出し・画像の挿入は Android のファイル選択（`content://`）に対応。ローカルフォルダ同期とフォルダへの一括書き出しは無い
 - アイコンの長押しメニュー（ショートカット）: 今日の日記・新しいノート・新しいタスク（`res/xml/shortcuts.xml`）
-- 他のアプリの「共有」で、テキストや URL を新しいノートにする。テキストを選んだときのメニューの「日食にメモ」でも同じ（`ACTION_PROCESS_TEXT`）
+- 他のアプリの「共有」で、テキストや URL を新しいノートにする。テキストを選んだときのメニューの「日色にメモ」でも同じ（`ACTION_PROCESS_TEXT`）
 - クイック設定タイル「今日の日記」（`DiaryTileService.kt`。Android 14 以降の `PendingIntent` 版の起動に対応、ロック中は解除を求める）
 - ネイティブライブラリは 16 KB ページサイズに対応（NDK r28 の既定。Android 15 以降の端末と Google Play の要件）
-- Google Drive・OneDrive のブラウザログインは、ブラウザから戻った時点でページに「日食に戻る」ボタンを出し、
+- Google Drive・OneDrive のブラウザログインは、ブラウザから戻った時点でページに「日色に戻る」ボタンを出し、
   トークンの取得はアプリが前面に戻って通信できるようになるまで待つ（バックグラウンドのアプリは通信を止められることがあるため）
 
 Google Drive の OAuth クライアント（「デスクトップアプリ」型）は、ビルド時に環境変数
@@ -215,7 +215,7 @@ Joplin と同じ形式のリビジョンを作成・同期・復元できる（J
 ### 同時同期
 
 Nextcloud の条件付き書き込み（`If-Match`）は原子的ではない（同じ版を前提にした書き込みが 2 つとも
-通ることがあると実測で確認）。Google Drive には条件付き書き込み自体が無い。そのため日食の端末どうしは、
+通ることがあると実測で確認）。Google Drive には条件付き書き込み自体が無い。そのため日色の端末どうしは、
 同期先の `.nisshoku/sync/` ディレクトリを排他ロックにして 1 台ずつ同期する。作成はローカルフォルダ・
 Nextcloud・OneDrive では原子的。Google Drive では同名フォルダを作れてしまうため、各端末が自分のフォルダを
 作って少し待ち、最も古いものを作った端末だけが勝つ「選挙」で決める。持ち主が更新しなくなったロックは一定時間で
@@ -294,5 +294,5 @@ NISSHOKU_NEXTCLOUD_URL=... NISSHOKU_NEXTCLOUD_USER=... NISSHOKU_NEXTCLOUD_PASSWO
   同時に同期した場合の競合は防げない（各サービス側の競合コピーになる）。同じ PC・ネットワーク共有では安全。
 - 2 台で同じノートの履歴を同時に記録すると、履歴の復元結果が近似になることがある（Joplin も同様）。
 - 共有ノートブック（Joplin Server / Cloud の機能）は未対応。
-- Joplin 自身は条件付き書き込みも排他ロックも使わないため、Joplin と日食がまったく同時に同じノートを
+- Joplin 自身は条件付き書き込みも排他ロックも使わないため、Joplin と日色がまったく同時に同じノートを
   書き込んだ場合の上書きは防げない（Joplin どうしでも同じ）。

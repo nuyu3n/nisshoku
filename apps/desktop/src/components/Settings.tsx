@@ -576,7 +576,7 @@ function SyncTab() {
             {L("マイドライブ内のフォルダ名", "Folder in My Drive")}
             <input className="input" value={folder} onChange={(e) => setFolder(e.target.value)} />
           </label>
-          <p className="muted">{L("日食が作成したファイルにだけアクセスします。ドライブのほかのファイルは見えません。", "Nisshoku can only see the files it created, nothing else in your drive.")}</p>
+          <p className="muted">{L("日色が作成したファイルにだけアクセスします。ドライブのほかのファイルは見えません。", "Nisshoku can only see the files it created, nothing else in your drive.")}</p>
           {(gOwn || !settings.gdriveAvailable) && (
             <>
               <ol className="muted small">
@@ -1142,7 +1142,7 @@ function AboutTab() {
       <div className="about-head">
         <img src={appIcon} alt="" width={56} height={56} />
         <div>
-          <b>{L("日食", "Nisshoku")}</b>
+          <b>{L("日色", "Nisshoku")}</b>
           <small>
             {L("バージョン", "Version")} {u.current || "…"} · {L(...KIND_LABEL[kind])}
           </small>

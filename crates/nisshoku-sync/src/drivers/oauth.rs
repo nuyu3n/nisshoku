@@ -351,10 +351,10 @@ impl BrowserLogin {
 /// The page the browser lands on after the sign-in.
 fn page(ok: bool, error: Option<&str>, back: Option<&str>) -> String {
     let message = if ok {
-        "ログイン情報を受け取りました。日食に戻ってください（このタブは閉じてかまいません）。<br>\
+        "ログイン情報を受け取りました。日色に戻ってください（このタブは閉じてかまいません）。<br>\
          Signed in. Please return to Nisshoku (you can close this tab)."
     } else {
-        "ログインできませんでした。日食に戻ってやり直してください。<br>\
+        "ログインできませんでした。日色に戻ってやり直してください。<br>\
          Could not sign in. Please return to Nisshoku and try again."
     };
     let detail = error
@@ -364,7 +364,7 @@ fn page(ok: bool, error: Option<&str>, back: Option<&str>) -> String {
         .map(|link| {
             format!(
                 "<p><a href=\"{}\" style=\"display:inline-block;padding:.7em 1.4em;border-radius:8px;\
-                 background:#d97757;color:#fff;text-decoration:none\">日食に戻る / Back to Nisshoku</a></p>",
+                 background:#d97757;color:#fff;text-decoration:none\">日色に戻る / Back to Nisshoku</a></p>",
                 escape_html(link)
             )
         })

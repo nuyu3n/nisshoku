@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
 
 use nisshoku_core::Database;
@@ -17,6 +18,13 @@ pub struct AppState {
     pub status: Mutex<SyncStatus>,
     /// A Nextcloud sign-in waiting for the browser.
     pub nextcloud_flow: Mutex<Option<LoginFlow>>,
+    /// Whether the window is in front (phones: the system may cut the
+    /// network of apps in the background).
+    pub foreground: AtomicBool,
+    /// Set when the app went to the background (since the last sync began).
+    pub went_background: AtomicBool,
+    /// A sync failed while in the background: run it again on return.
+    pub retry_on_return: AtomicBool,
 }
 
 impl AppState {

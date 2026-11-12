@@ -118,7 +118,7 @@ const paths: Record<string, string> = {
   data: "M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3",
 };
 
-export function Icon({ name, className }: { name: string; className?: string }) {
+export function Icon({ name, className, style }: { name: string; className?: string; style?: React.CSSProperties }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -128,6 +128,7 @@ export function Icon({ name, className }: { name: string; className?: string }) 
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={style}
       data-icon={name}
       aria-hidden="true"
     >

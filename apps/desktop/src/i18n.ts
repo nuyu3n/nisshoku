@@ -3,7 +3,7 @@
 import { useStore } from "./store";
 
 const ja = {
-  appName: "日食",
+  appName: "日色",
   // Sidebar
   "nav.search": "検索・コマンド",
   "nav.allNotes": "すべてのノート",
@@ -165,9 +165,10 @@ const ja = {
   "lock.enter": "パスワードを入力して開く",
   "lock.open": "開く",
   "lock.wrong": "パスワードが違います",
-  "lock.notice": "🔒 このノートは日食でロックされています。",
+  "lock.notice": "🔒 このノートは日色でロックされています。",
   "lock.done": "ロックしました",
   "lock.removed": "ロックを外しました",
+  "editor.keptDeleted": "書いていたノートが別の端末で削除されました。書いていた文章は新しいノートとして残しました",
   "links.missing": "リンク先のノートが見つかりません（削除されたか、まだ同期されていません）",
   "reference.title": "資料",
   "reference.choose": "資料にするノートを選ぶ",
@@ -552,6 +553,7 @@ const en: Dict = {
   "lock.notice": "🔒 This note is locked in Nisshoku.",
   "lock.done": "Locked",
   "lock.removed": "Lock removed",
+  "editor.keptDeleted": "The note being written was deleted on another device. Its text was kept as a new note",
   "links.missing": "The linked note was not found (deleted, or not synced yet)",
   "reference.title": "Reference",
   "reference.choose": "Choose a note to show",

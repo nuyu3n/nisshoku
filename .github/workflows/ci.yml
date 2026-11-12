@@ -32,6 +32,11 @@ jobs:
         run: mkdir -p apps/desktop/dist && echo '<!doctype html>' > apps/desktop/dist/index.html
         shell: bash
       - run: cargo test --workspace
+        env:
+          # The sync fuzz runs 20 seeds per case by default (over an hour, 3 on
+          # the runners); a few seeds per push keep CI in minutes. Run the full
+          # count locally before a release.
+          NISSHOKU_FUZZ_COUNT: 3
 
   web:
     name: Type check

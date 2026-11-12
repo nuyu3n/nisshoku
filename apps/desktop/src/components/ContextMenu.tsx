@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { Icon } from "./Icon";
+import { isMobile } from "../lib/mobile";
 
 export type MenuItem =
   | "sep"
@@ -17,6 +18,8 @@ export type MenuItem =
       danger?: boolean;
       disabled?: boolean;
       checked?: boolean;
+      /** A colour shown in place of the icon (a colour choice). */
+      swatch?: string;
       run?: () => void | Promise<void>;
       submenu?: MenuItem[];
     };
@@ -63,9 +66,21 @@ export const menuOpen = () => useMenu.getState().items !== null;
 export const onMenuChange = (f: () => void) => useMenu.subscribe(f);
 
 /** Props for an element with a context menu. */
+/**
+ * Whether a context menu event is a phone's long press on text being written:
+ * that long press selects text (and Android shows its own copy / paste bar),
+ * so no menu of the app's comes up from the bottom over it.
+ */
+export function isTextLongPress(e: { target: EventTarget | null }): boolean {
+  if (!isMobile) return false;
+  const el = e.target as HTMLElement | null;
+  return !!el?.closest?.("input, textarea, [contenteditable='true'], .ProseMirror");
+}
+
 export function contextMenu(items: () => MenuItem[]) {
   return {
     onContextMenu: (e: React.MouseEvent) => {
+      if (isTextLongPress(e)) return;
       e.preventDefault();
       e.stopPropagation();
       openMenu(e, items());
@@ -207,10 +222,10 @@ function MenuList({ items, x, y, above, before, alignRight, onClose, level, titl
               onClick={(e) => activate(i, e.currentTarget)}
             >
               {/* A checkable item with an icon keeps the icon and shows the check at the end. */}
-              {item.checked !== undefined && !item.icon ? <span className="menu-check">{item.checked ? <Icon name="check" /> : null}</span> : <Icon name={item.icon ?? "blank"} />}
+              {item.swatch ? <span className="menu-swatch" style={{ background: item.swatch }} /> : item.checked !== undefined && !item.icon ? <span className="menu-check">{item.checked ? <Icon name="check" /> : null}</span> : <Icon name={item.icon ?? "blank"} />}
               <span className="menu-text">{item.label}</span>
               {item.hint && <span className="menu-hint">{item.hint}</span>}
-              {item.checked && item.icon && <Icon name="check" className="menu-arrow" />}
+              {item.checked && (item.icon || item.swatch) && <Icon name="check" className="menu-arrow" />}
               {item.submenu && <Icon name="chevronRight" className="menu-arrow" />}
             </button>
           );

@@ -558,7 +558,7 @@ fn plot_markdown(db: &Database, plot: &Plot) -> String {
     let mut out = format!(
         "> {}\n",
         tr(
-            "このノートは日食のプロットボードです。カードの編集は日食で行ってください。",
+            "このノートは日色のプロットボードです。カードの編集は日色で行ってください。",
             "This note is a plot board of Nisshoku; edit its cards in Nisshoku."
         )
     );

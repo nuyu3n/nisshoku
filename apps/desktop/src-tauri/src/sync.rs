@@ -729,12 +729,53 @@ pub async fn sync_now<R: Runtime>(app: AppHandle<R>) -> CmdResult<SyncStatus> {
     Ok(run_sync(&app).await)
 }
 
+/// Phones cut the network of apps in the background (so a sync started
+/// there, or still running when the app left, fails: the Google Drive or
+/// OneDrive token cannot be refreshed, requests are cut). Syncs wait for the
+/// front, and errors from the background are not shown but retried.
+fn background_limited() -> bool {
+    cfg!(target_os = "android")
+}
+
+/// The window came to the front or went to the background.
+#[tauri::command]
+pub fn set_foreground<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>, visible: bool) {
+    use std::sync::atomic::Ordering::SeqCst;
+    state.foreground.store(visible, SeqCst);
+    if !visible {
+        state.went_background.store(true, SeqCst);
+        return;
+    }
+    if !background_limited() {
+        return;
+    }
+    // Back in front: run what failed meanwhile, or a sync if the last one is
+    // a while ago (changes from other devices, and ours made just before
+    // leaving, which could not be sent).
+    let stale = state.status.lock().map(|s| nisshoku_core::time::now_ms() - s.last_sync > 60_000).unwrap_or(true);
+    if state.retry_on_return.swap(false, SeqCst) || stale {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            // (A moment for the network to come back.)
+            tokio::time::sleep(Duration::from_millis(800)).await;
+            run_sync(&app).await;
+        });
+    }
+}
+
 /// Runs a sync unless one is running, publishing the status as it goes.
 pub async fn run_sync<R: Runtime>(app: &AppHandle<R>) -> SyncStatus {
     let state = app.state::<AppState>();
     let Ok(_guard) = state.sync_lock.try_lock() else {
         return state.status.lock().unwrap().clone();
     };
+    use std::sync::atomic::Ordering::SeqCst;
+    if background_limited() && !state.foreground.load(SeqCst) {
+        // In the background: on return (see `set_foreground`).
+        state.retry_on_return.store(true, SeqCst);
+        return state.status.lock().unwrap().clone();
+    }
+    state.went_background.store(false, SeqCst);
     let mut status = state.status.lock().unwrap().clone();
     if target(&state.db()) == TargetConfig::None {
         status = initial_status(&state.db());
@@ -803,6 +844,17 @@ pub async fn run_sync<R: Runtime>(app: &AppHandle<R>) -> SyncStatus {
             if changed_locally {
                 let _ = app.emit("data-changed", ());
             }
+        }
+        // The app left during the sync: the error is most likely the network
+        // the system cut. Not shown; tried again on return.
+        Err((message, false))
+            if background_limited()
+                && (state.went_background.load(SeqCst) || !state.foreground.load(SeqCst)) =>
+        {
+            tracing::info!("sync failed in the background, retried on return: {message}");
+            state.retry_on_return.store(true, SeqCst);
+            status.state = "idle".into();
+            status.message = None;
         }
         Err((message, needs_password)) => {
             status.state = "error".into();

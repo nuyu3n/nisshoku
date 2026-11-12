@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nisshoku",
   "mainBinaryName": "nisshoku",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "identifier": "app.nisshoku.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -50,7 +50,7 @@
     "category": "Productivity",
     "homepage": "https://github.com/nuyu3n/nisshoku",
     "shortDescription": "A quiet place to write: novels, notes and a diary",
-    "longDescription": "日食は、小説や日記を書くためのノートアプリです。Joplin と互換の同期（Nextcloud・OneDrive・Google Drive・ローカルフォルダ、エンドツーエンド暗号化）に対応しています。",
+    "longDescription": "日色は、小説や日記を書くためのノートアプリです。Joplin と互換の同期（Nextcloud・OneDrive・Google Drive・ローカルフォルダ、エンドツーエンド暗号化）に対応しています。",
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "wix": { "language": ["ja-JP", "en-US"], "upgradeCode": "60b01a55-47dc-5890-9c23-56475257d619" },

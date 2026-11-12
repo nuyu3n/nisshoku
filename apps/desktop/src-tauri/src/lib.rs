@@ -1,4 +1,4 @@
-//! 日食 — the desktop app: commands for the window, over the Joplin-compatible
+//! 日色 — the desktop app: commands for the window, over the Joplin-compatible
 //! data model and sync engine.
 
 #[cfg(target_os = "android")]
@@ -37,6 +37,7 @@ pub fn handlers<R: tauri::Runtime>()
         notes::rename_folder,
         notes::move_folder,
         notes::set_folder_icon,
+        notes::set_folder_color,
         notes::export_all,
         notes::trash_folder,
         notes::list_notes,
@@ -108,6 +109,7 @@ pub fn handlers<R: tauri::Runtime>()
         sync::set_master_password,
         sync::set_encryption,
         sync::sync_now,
+        sync::set_foreground,
         tasks::create_task,
         tasks::set_todo_due,
         widgets::refresh_widgets,
@@ -142,6 +144,9 @@ pub fn make_state(dir: &std::path::Path) -> Result<AppState, Box<dyn std::error:
         sync_lock: tokio::sync::Mutex::new(()),
         status: Mutex::new(status),
         nextcloud_flow: Mutex::new(None),
+        foreground: std::sync::atomic::AtomicBool::new(true),
+        went_background: std::sync::atomic::AtomicBool::new(false),
+        retry_on_return: std::sync::atomic::AtomicBool::new(false),
     })
 }
 
@@ -247,5 +252,5 @@ pub fn run() {
         })
         .invoke_handler(handlers())
         .run(tauri::generate_context!())
-        .expect("error while running 日食");
+        .expect("error while running 日色");
 }

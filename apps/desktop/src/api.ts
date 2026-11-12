@@ -19,6 +19,8 @@ export interface Folder {
   title: string;
   parentId: string;
   icon: string;
+  /** `#rrggbb`, or empty. */
+  color: string;
   isDiary: boolean;
   /** Marked as a work (a novel…): its notes are a manuscript, characters, a plot and materials. */
   isWork: boolean;
@@ -416,6 +418,8 @@ export const api = {
   setMasterPassword: (password: string) => call<SyncStatus>("set_master_password", { password }),
   setEncryption: (enabled: boolean, password?: string) =>
     call<void>("set_encryption", { enabled, password: password ?? null }),
+  setFolderColor: (id: string, color: string | null) => call<void>("set_folder_color", { id, color }),
+  setForeground: (visible: boolean) => call<void>("set_foreground", { visible }),
   syncNow: () => call<SyncStatus>("sync_now"),
   latestRelease: () => call<Release>("latest_release"),
   // Works

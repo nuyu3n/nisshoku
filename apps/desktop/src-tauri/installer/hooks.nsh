@@ -2,7 +2,7 @@
 ;
 ; The app installs into a folder with an ASCII name ("Nisshoku"); what people
 ; see is localized: in Japanese, the shortcuts and the entry in Settings > Apps
-; are named 日食.
+; are named 日色 (日食 up to version 0.3.0: those shortcuts are renamed).
 
 ; Set when an install of version 0.1.0 (folder "日食") was replaced.
 Var NisshokuMigrated
@@ -10,7 +10,7 @@ Var NisshokuMigrated
 !macro NISSHOKU_NAME
   ; The shortcut name in the installer's language (chosen from Windows' display language).
   ${If} $LANGUAGE == 1041
-    StrCpy $R9 "日食"
+    StrCpy $R9 "日色"
   ${Else}
     StrCpy $R9 "${PRODUCTNAME}"
   ${EndIf}
@@ -31,20 +31,20 @@ Var NisshokuMigrated
 
 !macro NSIS_HOOK_POSTINSTALL
   !insertmacro NISSHOKU_NAME
-  ${If} $NisshokuMigrated = 1
-    ; The old shortcuts pointed into the removed folder: point them here
-    ; (an update does not make shortcuts by itself).
-    ${If} ${FileExists} "$SMPROGRAMS\日食.lnk"
-    ${OrIf} $UpdateMode = 1
-      Delete "$SMPROGRAMS\日食.lnk"
-      CreateShortcut "$SMPROGRAMS\$R9.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-      !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\$R9.lnk"
-    ${EndIf}
-    ${If} ${FileExists} "$DESKTOP\日食.lnk"
-      Delete "$DESKTOP\日食.lnk"
-      CreateShortcut "$DESKTOP\$R9.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
-      !insertmacro SetLnkAppUserModelId "$DESKTOP\$R9.lnk"
-    ${EndIf}
+  ; Shortcuts named 日食 (the app's name up to 0.3.0, and those of 0.1.0
+  ; pointing into its removed folder) become ones to this install, under
+  ; today's name. (An update does not make shortcuts by itself.)
+  ${If} ${FileExists} "$SMPROGRAMS\日食.lnk"
+  ${OrIf} $NisshokuMigrated = 1
+    Delete "$SMPROGRAMS\日食.lnk"
+    Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    CreateShortcut "$SMPROGRAMS\$R9.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\$R9.lnk"
+  ${EndIf}
+  ${If} ${FileExists} "$DESKTOP\日食.lnk"
+    Delete "$DESKTOP\日食.lnk"
+    CreateShortcut "$DESKTOP\$R9.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+    !insertmacro SetLnkAppUserModelId "$DESKTOP\$R9.lnk"
   ${EndIf}
   ${If} $R9 != "${PRODUCTNAME}"
     ; Shortcuts made under the product name get the localized one.
@@ -63,6 +63,8 @@ Var NisshokuMigrated
 !macro NSIS_HOOK_POSTUNINSTALL
   ; The localized shortcuts (the uninstaller removes those named ${PRODUCTNAME}).
   ${If} $UpdateMode <> 1
+    Delete "$SMPROGRAMS\日色.lnk"
+    Delete "$DESKTOP\日色.lnk"
     Delete "$SMPROGRAMS\日食.lnk"
     Delete "$DESKTOP\日食.lnk"
   ${EndIf}

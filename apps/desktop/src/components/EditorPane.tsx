@@ -233,7 +233,8 @@ export function EditorPane() {
       onOpenCharacter: (id) => useStore.getState().select(id),
     }),
     editorProps: {
-      attributes: { class: "prose", spellcheck: "false" },
+      // (Phones draw the empty note's placeholder with CSS: see editor/setup.ts.)
+      attributes: { class: "prose", spellcheck: "false", style: `--empty-placeholder: ${JSON.stringify(t("editor.placeholder"))}` },
       handlePaste: (_view, event) => {
         const ed = editorRef.current;
         if (!ed) return false;
@@ -380,6 +381,19 @@ export function EditorPane() {
   const remoteVersion = useStore((s) => s.remoteVersion);
   const saveStateRef = useRef<SaveState>("saved");
   saveStateRef.current = saveState;
+  /**
+   * Whether the page holds something not saved yet: not only by the save
+   * state, which lags a keystroke behind, but by the text itself, and while
+   * a phone keyboard is still composing a word (not in the document yet).
+   * Replacing the page then would lose that text.
+   */
+  const hasUnsaved = () => {
+    if (saveStateRef.current !== "saved") return true;
+    if (editorRef.current?.view.composing) return true;
+    const saved = lastSaved.current;
+    if (!saved || !noteRef.current || lockedRef.current) return false;
+    return titleRef.current !== saved.title || currentBody() !== saved.body;
+  };
   useEffect(() => {
     const n = noteRef.current;
     if (remoteVersion === 0 || !n) return;
@@ -393,14 +407,29 @@ export function EditorPane() {
           baseRef.current = { title: fresh.title, body: fresh.body };
           return;
         }
-        if (saveStateRef.current === "saved") useStore.getState().reloadNote();
+        if (!hasUnsaved()) useStore.getState().reloadNote();
         else
           useStore.getState().toast(t("editor.updatedElsewhere"), {
             label: t("editor.loadLatest"),
             run: () => useStore.getState().reloadNote(),
           });
       },
-      () => useStore.getState().select(null),
+      async () => {
+        // Deleted elsewhere. What was being written here is kept as a new note.
+        if (noteRef.current?.id !== n.id) return;
+        if (hasUnsaved()) {
+          window.clearTimeout(saveTimer.current);
+          const kept = await api.createNote(undefined, titleRef.current, currentBody()).catch(report);
+          noteRef.current = null;
+          if (kept) {
+            await useStore.getState().refresh();
+            useStore.getState().select(kept.id);
+            useStore.getState().toast(t("editor.keptDeleted"));
+            return;
+          }
+        }
+        useStore.getState().select(null);
+      },
     );
   }, [remoteVersion]);
 

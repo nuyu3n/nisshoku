@@ -37,7 +37,7 @@ function SubNotebooks({ folderId }: { folderId: string }) {
       )}
       {kids.map((f) => (
         <button key={f.id} className="sub-nb" onClick={() => go(f.id)}>
-          {f.icon ? <span className="emoji">{f.icon}</span> : <Icon name={f.isWork ? "work" : "folder"} />}
+          {f.icon ? <span className="emoji">{f.icon}</span> : <Icon name={f.isWork ? "work" : "folder"} style={f.color ? { color: f.color } : undefined} />}
           <span>{f.title || t("folder.untitled")}</span>
           {f.noteCount > 0 && <small>{f.noteCount}</small>}
         </button>

@@ -1,6 +1,7 @@
 // The editor's extensions, shared by the app and the self-test.
 
 import { Extension, InputRule, type Extensions } from "@tiptap/core";
+import { isMobile } from "../lib/mobile";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { Focus, Placeholder } from "@tiptap/extensions";
@@ -61,9 +62,13 @@ export function editorExtensions(o: SetupOptions = {}): Extensions {
     SafeParagraph,
     Markdown,
     CjkEmphasis,
-    Placeholder.configure({
-      placeholder: ({ node }) => o.placeholder?.(node.type.name === "heading") ?? "",
-    }),
+    ...(isMobile
+      ? []
+      : [
+          Placeholder.configure({
+            placeholder: ({ node }) => o.placeholder?.(node.type.name === "heading") ?? "",
+          }),
+        ]),
     Focus.configure({ className: "has-focus", mode: "shallowest" }),
     TaskList,
     TaskItem.configure({ nested: true }),

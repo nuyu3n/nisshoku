@@ -108,7 +108,7 @@ note(
 note(part1, "第二章　手紙", "　その手紙が届いたのは、雨の降る火曜日のことだった。\n\n　差出人の名前はなかった。", 3 * day);
 extra.set(notes[0].id, { tags: ["推敲中", "長編"], pinned: true });
 note(part1, "人物メモ", "- 澪（みお）：主人公。十七歳\n- 母：港町の食堂を営む\n- 父：漁師。三日前から行方不明", 6 * day);
-note(memo, "資料メモ", "## 登場人物\n\n| 名前 | 年齢 | 役割 |\n| --- | --- | --- |\n| 澪 | 17 | 主人公 |\n| 母 | 45 | 食堂の店主 |\n\n## 物理の話\n\n灯台の光が届く距離は $d \\approx 3.57\\sqrt{h}$ で見積もれる。\n\n$$\n\\int_0^1 x^2 \\, dx = \\frac{1}{3}\n$$", 5 * day);
+note(memo, "資料メモ", "## 登場人物\n\n| 名前 | 年齢 | 役割 |\n| --- | --- | --- |\n| 澪 | 17 | 主人公 |\n| 母 | 45 | 食堂の店主 |\n\n## 物理の話\n\n灯台の光が届く距離は $d \\approx 3.57\\sqrt{h}$ で見積もれる。\n\n$$\n\\int_0^1 x^2 \\, dx = \\frac{1}{3}\n$$\n\n## やること\n\n- [ ] 灯台の資料を集める\n- [x] 年表を作る", 5 * day);
 note(shorts, "Wi-Fiの届かない部屋", "　その部屋ではWi-Fiが届かなかった。iPhoneの画面には、2026年11月8日、午後3時の表示。\n\n　「OK、じゃあ10分だけ待つよ」と彼は言った。NASAのTシャツを着て、Hello worldと書かれたマグを持っている。\n\n　本当に？　嘘でしょ!?　ありえない!!\n\n　|東京《とうきょう》の|蒼穹《そうきゅう》は、いつもより低く見えた。電車はJR山手線、時速は約35km。彼女は、ゆっくりと、言葉を、選んだ。\n\n　資料はhttps://docs.google.com/spreadsheets/d/1zsYNc8oP1r7dRb7dqQex/editにまとめました。Discordのチャンネルhttps://discord.com/channels/1432285315317496にも貼っておきます。\n\n▼高専祭2日目シフト\n11:00-12:30\nhttps://nextcloud.kcct-gakuseikai.jp/index.php/f/985175\n\n" +"　霧の向こうに、見慣れない影がある。".repeat(40), 8 * day);
 note(shorts, "雨の図書館","　閉館時間を過ぎても、その人は窓際の席から動かなかった。", 9 * day);
 note(memo, "タイトル案", "- 夜明けの街\n- 霧の港\n- 灯台守の娘", 12 * day);
@@ -285,6 +285,8 @@ written[isoDay(0)] = 1240;
 /** `?latency=300`: every call answers that many ms late, like a slow device (for checking loading states). */
 const latency = Number(new URLSearchParams(location.search).get("latency")) || 0;
 
+const folderColors = new Map<string, string>();
+
 export async function mockInvoke(cmd: string, args: Record<string, any> = {}): Promise<unknown> {
   if (latency) await new Promise((r) => setTimeout(r, latency));
   const live = notes.filter((n) => !n.deletedTime && !n.isConflict);
@@ -299,10 +301,13 @@ export async function mockInvoke(cmd: string, args: Record<string, any> = {}): P
       if (f) f.icon = args.emoji ?? "";
       return null;
     }
+    case "set_folder_color":
+      folderColors.set(args.id as string, (args.color as string | null) ?? "");
+      return null;
     case "list_folders":
       return folders
         .filter((f) => !f.deleted)
-        .map<Folder>((f) => ({ id: f.id, title: f.title, parentId: f.parentId, icon: f.icon, isDiary: f.isDiary, isWork: workMeta.has(f.id), noteCount: live.filter((n) => n.parentId === f.id).length }));
+        .map<Folder>((f) => ({ id: f.id, title: f.title, parentId: f.parentId, icon: f.icon, color: folderColors.get(f.id) ?? "", isDiary: f.isDiary, isWork: workMeta.has(f.id), noteCount: live.filter((n) => n.parentId === f.id).length }));
     case "list_notes": {
       const scope = args.scope as Scope;
       const diaryIds = folders.filter((f) => f.isDiary).map((f) => f.id);
