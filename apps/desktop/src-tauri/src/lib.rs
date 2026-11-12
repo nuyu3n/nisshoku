@@ -110,6 +110,7 @@ pub fn handlers<R: tauri::Runtime>()
         sync::set_encryption,
         sync::sync_now,
         sync::set_foreground,
+        sync::profile_dir,
         tasks::create_task,
         tasks::set_todo_due,
         widgets::refresh_widgets,

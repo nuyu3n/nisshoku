@@ -15,6 +15,8 @@ import { dueLabel, isOverdue } from "../lib/tasks";
 import { useWork, workIdOf } from "../lib/works";
 import { WorkPanel } from "./Work";
 import { NoteListSkeleton, WorkPanelSkeleton } from "./Skeleton";
+import { Fab, PullToSync, SwipeRow } from "./MobileUI";
+import { isMobile } from "../lib/mobile";
 
 /**
  * In a notebook with parents or sub-notebooks: the way up, and its
@@ -90,7 +92,9 @@ function NoteItem({ note, active, draggable: reorder, onReorder, index }: { note
       onClick={() => useStore.getState().select(note.id)}
       onKeyDown={(e) => e.key === "Enter" && useStore.getState().select(note.id)}
       {...contextMenu(() => noteMenu(note))}
-      draggable
+      // Not on phones: there a long press would start a drag that fights the
+      // swipe and the long-press menu (moving is in the menu).
+      draggable={!isMobile}
       onDragStart={(e) => {
         e.dataTransfer.setData("application/x-nisshoku-note", note.id);
         e.dataTransfer.effectAllowed = "move";
@@ -166,6 +170,11 @@ function NoteItem({ note, active, draggable: reorder, onReorder, index }: { note
       )}
     </div>
   );
+}
+
+/** Phones: the list syncs when pulled down. */
+function MaybePull({ children }: { children: React.ReactNode }) {
+  return isMobile ? <PullToSync>{children}</PullToSync> : <>{children}</>;
 }
 
 export function NoteList() {
@@ -274,6 +283,7 @@ export function NoteList() {
         ) : (
           <button
             className="icon-btn"
+            data-new
             title={scope.kind === "diary" ? t("diary.writeToday") : scope.kind === "todo" ? t("tasks.add") : `${t("list.new")} (Ctrl+N)`}
             onClick={() => {
               if (scope.kind === "todo") window.dispatchEvent(new Event(FOCUS_TASK_INPUT));
@@ -318,12 +328,22 @@ export function NoteList() {
           <NoteListSkeleton />
         </div>
       )}
-      {!workId && scope.kind !== "diary" && !notesLoading && <div className="list-scroll" key={scope.kind === "search" ? "search" : JSON.stringify(scope)}>
+      {!workId && scope.kind !== "diary" && !notesLoading && <MaybePull><div className="list-scroll" key={scope.kind === "search" ? "search" : JSON.stringify(scope)}>
         {scope.kind === "todo" && <TaskList tasks={notes} />}
         {scope.kind !== "todo" && notes.length === 0 && (
           <div className="empty">{empty}</div>
         )}
-        {scope.kind !== "todo" && notes.map((n, i) => (
+        {scope.kind !== "todo" && notes.map((n, i) => isMobile ? (
+          <SwipeRow key={n.id} note={n}>
+            <NoteItem
+              index={i}
+              note={n}
+              active={n.id === selectedId}
+              draggable={false}
+              onReorder={() => {}}
+            />
+          </SwipeRow>
+        ) : (
           <NoteItem
             key={n.id}
             index={i}
@@ -349,7 +369,8 @@ export function NoteList() {
             }}
           />
         ))}
-      </div>}
+      </div></MaybePull>}
+      {isMobile && layout === "narrow" && !workId && <Fab />}
       {layout !== "narrow" && <Resizer pref="listWidth" min={240} max={520} />}
     </section>
   );

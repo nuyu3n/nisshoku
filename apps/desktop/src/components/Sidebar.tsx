@@ -246,6 +246,7 @@ function TodayCard() {
 function SyncButton() {
   const t = useT();
   const status = useStore((s) => s.syncStatus);
+  useStore((s) => s.syncProgress); // the text and bar follow the sync
   if (!status || status.state === "off") {
     return (
       <button className="sync-btn" onClick={() => useStore.getState().set({ settingsTab: "sync" })}>
@@ -256,9 +257,12 @@ function SyncButton() {
   }
   const syncing = status.state === "syncing";
   const error = status.state === "error";
+  const progress = syncing ? useStore.getState().syncProgress : null;
+  const ratio = progress && progress.total > 0 ? Math.min(1, progress.done / progress.total) : null;
   return (
     <button
-      className={`sync-btn${error ? " error" : ""}`}
+      className={`sync-btn${error ? " error" : ""}${syncing ? " syncing" : ""}`}
+      style={ratio !== null ? { ["--sync-progress" as string]: ratio } : undefined}
       title={status.message ?? t("sync.now")}
       onClick={() => {
         if (status.needsPassword) useStore.getState().set({ settingsTab: "sync" });
@@ -266,7 +270,7 @@ function SyncButton() {
       }}
     >
       <Icon name={error ? "alert" : "sync"} className={syncing ? "spin" : undefined} />
-      <span>{syncing ? t("sync.syncing") : error ? (status.message ?? t("sync.error")) : status.lastSync ? t("sync.last", { time: relativeTime(status.lastSync) }) : t("sync.never")}</span>
+      <span>{syncing ? (progress?.text ?? t("sync.syncing")) : error ? (status.message ?? t("sync.error")) : status.lastSync ? t("sync.last", { time: relativeTime(status.lastSync) }) : t("sync.never")}</span>
     </button>
   );
 }

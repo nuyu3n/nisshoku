@@ -14,6 +14,7 @@ import "./styles/genko.css";
 import "./styles/controls.css";
 import "./styles/motion.css";
 import "katex/dist/katex.min.css";
+import "./styles/mobile.css";
 
 const root = createRoot(document.getElementById("root")!);
 if (!isTauri && new URLSearchParams(window.location.search).has("selftest")) {

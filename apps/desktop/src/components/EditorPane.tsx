@@ -1011,7 +1011,7 @@ export function EditorPane() {
       {isMobile && editor && source === null && !readOnly && <MobileFormatBar editor={editor} />}
       {findOpen && editor && source === null && <FindBar editor={editor} mode={findOpen} onClose={() => setFindOpen(false)} />}
       <SlashMenu />
-      {editor && source === null && !readOnly && prefs.bubbleToolbar && <SelectionBubble editor={editor} onComment={addComment} onLink={() => void setLink(editor)} />}
+      {editor && source === null && !readOnly && prefs.bubbleToolbar && !isMobile && <SelectionBubble editor={editor} onComment={addComment} onLink={() => void setLink(editor)} />}
       {editor && source === null && !readOnly && <TableTools editor={editor} scroller={scrollRef.current} />}
       <TablePicker />
     </div>

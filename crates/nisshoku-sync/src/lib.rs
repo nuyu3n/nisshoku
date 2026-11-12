@@ -27,4 +27,4 @@ mod synchronizer;
 
 pub use error::{Result, SyncError};
 pub use storage::{DeltaChange, DeltaPage, Precondition, RemoteStat, RemoteStorage};
-pub use synchronizer::{SharedDb, SyncOptions, SyncReport, Synchronizer};
+pub use synchronizer::{ProgressHook, SharedDb, SyncOptions, SyncReport, SyncStep, Synchronizer};

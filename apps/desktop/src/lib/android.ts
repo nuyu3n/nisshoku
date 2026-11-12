@@ -18,6 +18,12 @@ declare global {
       setLanguage?: (language: string) => void;
       /** Android 13+: the language set for the app in the system settings, or "". */
       systemLanguage?: () => string;
+      /** A sync begins: the sync service keeps it going off screen, with a notification. */
+      syncStarted?: (dir: string) => void;
+      /** One sync in the background as soon as the network allows. */
+      syncInBackground?: () => void;
+      /** Background syncs every `minutes` (0: none), the app closed too. */
+      setBackgroundSync?: (minutes: number, dir: string) => void;
     };
   }
 }
@@ -88,6 +94,23 @@ function syncLanguage() {
   });
 }
 
+/**
+ * Syncs: a running one is kept going off screen by the sync service (with
+ * its progress in a notification), and background syncs follow the setting.
+ */
+async function startSyncBridge() {
+  const bridge = window.NisshokuAndroid;
+  if (!bridge?.syncStarted) return;
+  const dir = await api.profileDir().catch(() => null);
+  if (!dir) return;
+  const schedule = () => bridge.setBackgroundSync?.(useStore.getState().syncStatus?.state === "off" ? 0 : useStore.getState().prefs.backgroundSyncMinutes, dir);
+  schedule();
+  useStore.subscribe((now, before) => {
+    if (now.syncStatus?.state === "syncing" && before.syncStatus?.state !== "syncing") bridge.syncStarted?.(dir);
+    if (now.prefs.backgroundSyncMinutes !== before.prefs.backgroundSyncMinutes || (now.syncStatus?.state === "off") !== (before.syncStatus?.state === "off")) schedule();
+  });
+}
+
 let started = false;
 
 /** Called once the app has opened what it shows at start. */
@@ -97,6 +120,7 @@ export function startAndroidBridge() {
 
   void applyWidgetActions();
   syncLanguage();
+  void startSyncBridge();
   const link = window.NisshokuAndroid?.takeLink();
   if (link) void openLink(link).catch(report);
 

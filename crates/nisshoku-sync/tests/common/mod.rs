@@ -327,6 +327,7 @@ impl Client {
                     refresh_every: std::time::Duration::from_millis(300),
                     max_wait: std::time::Duration::from_secs(60),
                 },
+                progress: None,
             },
         );
         Self {

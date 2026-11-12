@@ -169,7 +169,33 @@ pub fn note_excerpt(title: &str, markdown: &str, max_chars: usize) -> String {
             body = &body[line.len()..];
         }
     }
-    excerpt(&strip_ruby(body), max_chars)
+    excerpt(&strip_math(&strip_ruby(body)), max_chars)
+}
+
+/// TeX (`$…$`, `$$…$$`) shown as a mark in excerpts: its source reads as noise.
+fn strip_math(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find('$') {
+        let display = rest[i..].starts_with("$$");
+        let open = if display { 2 } else { 1 };
+        let after = &rest[i + open..];
+        let close = if display { after.find("$$") } else { after.find('$') };
+        match close {
+            // (A lone `$`, as in a price, stays.)
+            Some(end) if end > 0 && (display || !after[..end].contains('\n')) => {
+                out.push_str(&rest[..i]);
+                out.push_str(" ［数式］ ");
+                rest = &after[end + open..];
+            }
+            _ => {
+                out.push_str(&rest[..i + 1]);
+                rest = &rest[i + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 pub fn excerpt(markdown: &str, max_chars: usize) -> String {
@@ -196,6 +222,13 @@ mod tests {
         );
         assert_eq!(count_chars("|漢字《かんじ》"), 5);
         assert_eq!(count_chars("---\n\n1. 一\n2. 二"), 2);
+    }
+
+    #[test]
+    fn math_in_excerpts() {
+        assert_eq!(note_excerpt("", "距離は $d \\approx 3.57$ で", 40), "距離は ［数式］ で");
+        assert_eq!(note_excerpt("", "$$\nx^2\n$$\n後", 40), "［数式］ 後");
+        assert_eq!(note_excerpt("", "100$ です", 40), "100$ です");
     }
 
     #[test]

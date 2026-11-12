@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import katex from "katex";
 import { useT } from "../i18n";
+import type { MathGroupId } from "./MathSheet";
 import { DatePicker, TimePicker } from "./Pickers";
 import { EmojiPicker } from "./EmojiPicker";
+import { MathSheet } from "./MathSheet";
+import { isMobile } from "../lib/mobile";
 
 interface DialogRequest {
   kind: "prompt" | "confirm" | "choose" | "math" | "date" | "time" | "emoji";
@@ -86,6 +89,10 @@ export function DialogHost() {
     useDialog.setState({ current: null });
     current.resolve(result);
   };
+  // Phones: math in a sheet of its own (components/MathSheet.tsx).
+  if (current.kind === "math" && isMobile) {
+    return <MathSheet key={current.title + current.initial} title={current.title} initial={current.initial ?? ""} display={!!current.display} canDelete={!!current.danger} onClose={close} />;
+  }
   const ok = () => {
     if (current.kind === "math") {
       close(value.trim());
@@ -241,21 +248,22 @@ function MathPreview({ latex, display }: { latex: string; display: boolean }) {
   );
 }
 
-const MATH_GROUPS: [string, [string, string][]][] = [
-  ["構造", [["a/b", "\\frac{@}{}"], ["√", "\\sqrt{@}"], ["xⁿ", "^{@}"], ["xₙ", "_{@}"], ["( )", "\\left( @ \\right)"], ["Σ", "\\sum_{i=1}^{n} @"], ["∫", "\\int_{a}^{b} @ \\, dx"], ["lim", "\\lim_{x \\to 0} @"], ["行列", "\\begin{pmatrix} @ & \\\\ & \\end{pmatrix}"], ["場合", "\\begin{cases} @ & \\text{if } \\\\ & \\text{otherwise} \\end{cases}"], ["揃え", "\\begin{aligned} @ &= \\\\ &= \\end{aligned}"], ["文字", "\\text{@}"]]],
-  ["演算", [["×", "\\times "], ["÷", "\\div "], ["±", "\\pm "], ["·", "\\cdot "], ["≠", "\\neq "], ["≤", "\\leq "], ["≥", "\\geq "], ["≈", "\\approx "], ["∞", "\\infty "], ["→", "\\to "], ["⇒", "\\Rightarrow "], ["∈", "\\in "], ["⊂", "\\subset "], ["∪", "\\cup "], ["∩", "\\cap "], ["∂", "\\partial "], ["∇", "\\nabla "], ["°", "^\\circ "]]],
-  ["ギリシャ", [["α", "\\alpha "], ["β", "\\beta "], ["γ", "\\gamma "], ["δ", "\\delta "], ["ε", "\\varepsilon "], ["θ", "\\theta "], ["λ", "\\lambda "], ["μ", "\\mu "], ["π", "\\pi "], ["ρ", "\\rho "], ["σ", "\\sigma "], ["φ", "\\varphi "], ["ω", "\\omega "], ["Δ", "\\Delta "], ["Σ", "\\Sigma "], ["Ω", "\\Omega "]]],
-  ["装飾", [["x̄", "\\bar{@}"], ["x̂", "\\hat{@}"], ["x⃗", "\\vec{@}"], ["ẋ", "\\dot{@}"], ["太字", "\\mathbf{@}"], ["ℝ", "\\mathbb{R}"], ["色", "\\textcolor{red}{@}"], ["枠", "\\boxed{@}"]]],
+const MATH_GROUPS: [MathGroupId, [string, string][]][] = [
+  ["structure", [["a/b", "\\frac{@}{}"], ["√", "\\sqrt{@}"], ["xⁿ", "^{@}"], ["xₙ", "_{@}"], ["( )", "\\left( @ \\right)"], ["Σ", "\\sum_{i=1}^{n} @"], ["∫", "\\int_{a}^{b} @ \\, dx"], ["lim", "\\lim_{x \\to 0} @"], ["行列", "\\begin{pmatrix} @ & \\\\ & \\end{pmatrix}"], ["場合", "\\begin{cases} @ & \\text{if } \\\\ & \\text{otherwise} \\end{cases}"], ["揃え", "\\begin{aligned} @ &= \\\\ &= \\end{aligned}"], ["文字", "\\text{@}"]]],
+  ["ops", [["×", "\\times "], ["÷", "\\div "], ["±", "\\pm "], ["·", "\\cdot "], ["≠", "\\neq "], ["≤", "\\leq "], ["≥", "\\geq "], ["≈", "\\approx "], ["∞", "\\infty "], ["→", "\\to "], ["⇒", "\\Rightarrow "], ["∈", "\\in "], ["⊂", "\\subset "], ["∪", "\\cup "], ["∩", "\\cap "], ["∂", "\\partial "], ["∇", "\\nabla "], ["°", "^\\circ "]]],
+  ["greek", [["α", "\\alpha "], ["β", "\\beta "], ["γ", "\\gamma "], ["δ", "\\delta "], ["ε", "\\varepsilon "], ["θ", "\\theta "], ["λ", "\\lambda "], ["μ", "\\mu "], ["π", "\\pi "], ["ρ", "\\rho "], ["σ", "\\sigma "], ["φ", "\\varphi "], ["ω", "\\omega "], ["Δ", "\\Delta "], ["Σ", "\\Sigma "], ["Ω", "\\Omega "]]],
+  ["accents", [["x̄", "\\bar{@}"], ["x̂", "\\hat{@}"], ["x⃗", "\\vec{@}"], ["ẋ", "\\dot{@}"], ["太字", "\\mathbf{@}"], ["ℝ", "\\mathbb{R}"], ["色", "\\textcolor{red}{@}"], ["枠", "\\boxed{@}"]]],
 ];
 
 function MathPalette({ onInsert }: { onInsert: (snippet: string) => void }) {
+  const t = useT();
   const [group, setGroup] = useState(0);
   return (
     <div className="math-palette">
       <div className="segmented small">
         {MATH_GROUPS.map(([name], i) => (
           <button key={name} className={group === i ? "on" : ""} onClick={() => setGroup(i)}>
-            {name}
+            {t(`math.group.${name}`)}
           </button>
         ))}
       </div>

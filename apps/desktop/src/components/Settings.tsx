@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, isTauri, type InstallKind, type StorageInfo, type SyncSettings } from "../api";
 import { appVersion, checkForUpdate, installUpdate, openReleasePage, useUpdate } from "../lib/updates";
+import { showAllReleases } from "../lib/whatsnew";
 import { report, useStore, type Preferences } from "../store";
 import { lang } from "../i18n";
 import { formatNumber, relativeTime } from "../lib/text";
@@ -475,6 +476,23 @@ function SyncTab() {
             ]}
           />
         </Field>
+        {isMobile && (
+          <Field
+            label={L("バックグラウンドで同期", "Sync in the background")}
+            hint={L("アプリを開いていないときも、この間隔で同期します（ネットにつながっているときだけ。Android の都合で多少ずれます）。", "Syncs at this interval with the app closed too (when online; Android may shift the times a little).")}
+          >
+            <SelectPref
+              pref="backgroundSyncMinutes"
+              options={[
+                [0, L("しない", "Never")],
+                [15, L("15分", "15 minutes")],
+                [30, L("30分", "30 minutes")],
+                [60, L("1時間", "1 hour")],
+                [180, L("3時間", "3 hours")],
+              ]}
+            />
+          </Field>
+        )}
         <SwitchPref pref="syncOnStart" label={L("起動したときに同期する", "Sync when the app starts")} />
         <SwitchPref pref="syncAfterEdit" label={L("書くのを止めて約20秒後に同期する", "Sync about 20 seconds after you stop typing")} />
         <EncryptionSection hasPassword={settings.hasMasterPassword} />
@@ -1181,6 +1199,9 @@ function AboutTab() {
           <button className="btn" onClick={() => void openReleasePage()}>
             {u.status === "available" ? L("リリースノート", "Release notes") : L("すべての版", "All versions")}
           </button>
+          <button className="btn" onClick={showAllReleases}>
+            {L("更新履歴", "What changed")}
+          </button>
         </div>
       </div>
       <SwitchPref
@@ -1196,11 +1217,24 @@ export function SettingsDialog() {
   const tab = useStore((s) => s.settingsTab);
   useStore((s) => s.prefs.language);
   const dir = useSlideDir(TABS.findIndex(([id]) => id === tab));
+  // Phones: the chosen section's pill in view.
+  useEffect(() => {
+    if (!tab || !isMobile) return;
+    requestAnimationFrame(() => document.querySelector(".settings-nav .nav-item.active")?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }));
+  }, [tab]);
   if (!tab) return null;
   const close = () => useStore.getState().set({ settingsTab: null });
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && close()} onKeyDown={(e) => e.key === "Escape" && close()}>
       <div className="dialog large">
+        {isMobile && (
+          <div className="settings-head">
+            <h2>{L("設定", "Settings")}</h2>
+            <button className="icon-btn" aria-label={L("閉じる", "Close")} onClick={close}>
+              <Icon name="x" />
+            </button>
+          </div>
+        )}
         <div className="settings">
           <div className="settings-nav">
             {TABS.filter(([id]) => !(isMobile && id === "keys")).map(([id, icon, [ja, en]]) => (

@@ -125,6 +125,21 @@ class MainActivity : TauriActivity() {
         return getSystemService(LocaleManager::class.java)?.applicationLocales?.get(0)?.language ?: ""
       }
 
+      /** A sync begins: keep it going off screen, with its progress in a notification (SyncService.kt). */
+      @JavascriptInterface fun syncStarted(dir: String) {
+        SyncService.start(this@MainActivity, dir)
+      }
+
+      /** One sync in the background as soon as possible (the app left with changes not sent). */
+      @JavascriptInterface fun syncInBackground() {
+        SyncWorker.runOnce(applicationContext)
+      }
+
+      /** Syncs in the background every `minutes` (0: never), the app closed too (SyncWorker.kt). */
+      @JavascriptInterface fun setBackgroundSync(minutes: Int, dir: String) {
+        SyncWorker.schedule(applicationContext, minutes, dir)
+      }
+
       /** Light or dark icons on the system bars, for the app's own theme (which may differ from the system's). */
       @JavascriptInterface fun setDarkTheme(dark: Boolean) {
         runOnUiThread {

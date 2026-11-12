@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, isTauri, type SyncStatus } from "./api";
+import { api, isTauri, type SyncProgress, type SyncStatus } from "./api";
 import { report, useStore } from "./store";
 import { Sidebar } from "./components/Sidebar";
 import { NoteList } from "./components/NoteList";
@@ -18,6 +18,9 @@ import { loadResources, refreshImages } from "./editor/images";
 import { layoutFor } from "./store";
 import { isoDate } from "./api";
 import { watchForeground } from "./lib/autosync";
+import { showWhatsNewIfUpdated } from "./lib/whatsnew";
+import { WhatsNewDialog } from "./components/WhatsNew";
+import { TabBar } from "./components/MobileUI";
 import { isMobile, useBackButton, useSystemInsets } from "./lib/mobile";
 import { TooltipHost } from "./components/Tooltip";
 import { startUpdateChecks } from "./lib/updates";
@@ -345,6 +348,7 @@ export function App() {
       startAndroidBridge();
       watchForeground();
       startUpdateChecks();
+      void showWhatsNewIfUpdated().catch(() => {});
       startWorkSync();
       if (!isTauri) await previewState();
     })();
@@ -368,6 +372,9 @@ export function App() {
           useStore.getState().toast(e.payload.message);
         }
       }),
+      listen<SyncProgress>("sync-progress", (e) => {
+        useStore.getState().set({ syncProgress: e.payload.state === "running" ? e.payload : null });
+      }),
       listen("data-changed", async () => {
         const s = useStore.getState();
         await s.refresh().catch(report);
@@ -386,7 +393,7 @@ export function App() {
     <div
       ref={appRef}
       data-nav={navDir}
-      className={`app layout-${layout} pane-${mobilePane}${isMobile ? " mobile" : ""}${focusMode ? " focus" : ""}${layout === "medium" && sidebarOpen ? " drawer-open" : ""}`}
+      className={`app layout-${layout} pane-${mobilePane}${isMobile ? " mobile" : ""}${isMobile && layout === "narrow" && mobilePane !== "editor" ? " with-tabs" : ""}${focusMode ? " focus" : ""}${layout === "medium" && sidebarOpen ? " drawer-open" : ""}`}
       lang={language}
       style={{ ["--sidebar-w" as string]: `${sidebarWidth}px`, ["--list-w" as string]: `${listWidth}px` }}
     >
@@ -401,12 +408,14 @@ export function App() {
       <ErrorBoundary kind="pane" className="main" resetKey={selectedId}>
         <EditorPane />
       </ErrorBoundary>
+      {isMobile && layout === "narrow" && mobilePane !== "editor" && <TabBar />}
       <ErrorBoundary kind="overlay" onClose={() => useStore.getState().set({ paletteOpen: false })}>
         <CommandPalette />
       </ErrorBoundary>
       <ErrorBoundary kind="overlay" onClose={() => useStore.getState().set({ settingsTab: null })}>
         <SettingsDialog />
         <WorkInfoDialog />
+        <WhatsNewDialog />
       </ErrorBoundary>
       <ErrorBoundary kind="overlay" onClose={() => void cancelDialog()}>
         <DialogHost />

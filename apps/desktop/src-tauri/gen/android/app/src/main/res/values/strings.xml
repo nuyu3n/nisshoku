@@ -32,4 +32,8 @@
     <string name="process_text_label">Note in Nisshoku</string>
     <string name="tile_diary">Diary</string>
     <string name="tile_diary_subtitle">Nisshoku</string>
+    <!-- The sync's notification (SyncService.kt). -->
+    <string name="sync_running">Syncing</string>
+    <string name="sync_channel">Sync</string>
+    <string name="sync_short">Sync</string>
 </resources>

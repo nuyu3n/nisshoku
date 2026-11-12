@@ -93,6 +93,49 @@ export function goToNumber(editor: Editor, n: number): boolean {
 
 const lineNumbersKey = new PluginKey("lineNumbers");
 
+/**
+ * How far below the top of a line of `font` (its content box, as the caret
+ * rectangle has it) the baseline is. Measured once per font: the numbers sit
+ * on the text's baseline, as a number written in the text would (centring
+ * the small digits made them look off by a pixel or two).
+ */
+const baselines = new Map<string, number>();
+/**
+ * `glyph`: from the top of the character's own box (what a caret rectangle
+ * covers) to the baseline. Otherwise from the top of a block of that font
+ * with normal line height (how a number is laid out in the gutter).
+ */
+function baselineOffset(el: Element, sample: string, glyph: boolean): number {
+  // (Per character too: a font stack draws Latin and kana with different
+  // fonts, whose heights differ. And per language: the fallback font for a
+  // kanji depends on `lang`, and the app's can differ from the page's.)
+  const font = fontOf(el);
+  const lang = el.closest("[lang]")?.getAttribute("lang") ?? "";
+  const key = `${font}|${lang}|${sample}|${glyph}`;
+  const known = baselines.get(key);
+  if (known !== undefined) return known;
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;";
+  probe.style.font = font;
+  if (lang) probe.lang = lang;
+  probe.style.lineHeight = "normal";
+  const text = document.createElement("span");
+  text.textContent = sample;
+  const mark = document.createElement("span");
+  mark.style.cssText = "display:inline-block;width:1px;height:0;vertical-align:baseline;";
+  probe.append(text, mark);
+  document.body.appendChild(probe);
+  const value = glyph ? mark.getBoundingClientRect().top - text.getBoundingClientRect().top : mark.offsetTop;
+  probe.remove();
+  baselines.set(key, value);
+  return value;
+}
+
+function fontOf(el: Element): string {
+  const c = getComputedStyle(el);
+  return `${c.fontStyle} ${c.fontWeight} ${c.fontSize} ${c.fontFamily}`;
+}
+
 class Gutter {
   private el: HTMLDivElement;
   private spans: HTMLSpanElement[] = [];
@@ -171,18 +214,16 @@ class Gutter {
       const s = this.spans[k];
       const node = doc.nodeAt(start);
       let top: number;
-      let height: number;
       try {
-        if (node?.isTextblock) {
-          // The first line of the block: its caret rectangle.
+        const dom = this.view.nodeDOM(start) as HTMLElement | null;
+        if (node?.isTextblock && dom) {
+          // The first line of the block: the number's baseline on its baseline.
           const c = this.view.coordsAtPos(start + 1);
-          top = c.top;
-          height = c.bottom - c.top;
+          const first = node.textContent.slice(0, 1) || "あ";
+          top = c.top + baselineOffset(dom, first, true) - baselineOffset(s, "1", false);
         } else {
-          const dom = this.view.nodeDOM(start) as HTMLElement | null;
           const r = dom?.getBoundingClientRect();
           top = r?.top ?? 0;
-          height = 24;
         }
       } catch {
         s.hidden = true;
@@ -191,9 +232,9 @@ class Gutter {
       s.hidden = false;
       const text = String(i + 1);
       if (s.textContent !== text) s.textContent = text;
-      s.style.transform = `translateY(${Math.round(top - origin)}px)`;
-      s.style.height = `${Math.round(height)}px`;
-      s.style.lineHeight = `${Math.round(height)}px`;
+      s.style.transform = `translateY(${(top - origin).toFixed(1)}px)`;
+      s.style.height = "";
+      s.style.lineHeight = "normal";
       s.classList.toggle("current", i === current && this.view.hasFocus());
     });
   }

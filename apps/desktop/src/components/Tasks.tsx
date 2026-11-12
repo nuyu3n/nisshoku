@@ -10,6 +10,7 @@ import { folderPath, moveSubmenu, noteMenu } from "../lib/actions";
 import { contextMenu, openMenu } from "./ContextMenu";
 import { Icon } from "./Icon";
 import { isMobile } from "../lib/mobile";
+import { haptic } from "../lib/haptics";
 
 const L = (ja: string, en: string) => (lang() === "en" ? en : ja);
 
@@ -49,6 +50,7 @@ function TaskRow({ task, folder }: { task: NoteSummary; folder?: string }) {
         onClick={(e) => {
           if (task.todoCompleted) return void setTaskDone(task, false);
           if (ticked) return; // already on its way
+          haptic();
           setTicked(true);
           // Its height, for folding away when it leaves the open tasks (lib/motion.ts).
           const row = e.currentTarget.closest<HTMLElement>(".task-row");
@@ -160,7 +162,7 @@ export function TaskList({ tasks }: { tasks: NoteSummary[] }) {
 
       {open === 0 && (
         <div className="empty">
-          {groups.done.length ? L("すべて完了しました 🎉", "All done 🎉") : L("タスクはまだありません。上の欄に書いて Enter で追加できます。", "No tasks yet. Type one above and press Enter.")}
+          {groups.done.length ? L("すべて完了しました 🎉", "All done 🎉") : isMobile ? L("タスクはまだありません。上の欄に書いて「追加」を押してください。", "No tasks yet. Type one above and tap Add.") : L("タスクはまだありません。上の欄に書いて Enter で追加できます。", "No tasks yet. Type one above and press Enter.")}
         </div>
       )}
 

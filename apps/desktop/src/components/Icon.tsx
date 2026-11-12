@@ -104,6 +104,8 @@ const paths: Record<string, string> = {
   redo: "M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3",
   quote: "M5 7h5v5c0 3-1.7 5-5 6M14 7h5v5c0 3-1.7 5-5 6",
   listOrdered: "M10 6h10M10 12h10M10 18h10M4 5h1.5v4M4 9h3M4 14.5a1.5 1.5 0 0 1 3 0c0 1.5-3 2-3 4h3",
+  keyboard: "M3 6h18v12H3zM7 9.5h.01M11 9.5h.01M15 9.5h.01M7 13.5h.01M17 13.5h.01M9 15h6",
+  backspace: "M9 5h11v14H9l-6-7zM12.5 9.5l5 5M17.5 9.5l-5 5",
   keyboardHide: "M3 4h18v11H3zM7 7.5h.01M11 7.5h.01M15 7.5h.01M7 11.5h10M9 19l3 2 3-2",
   rowAbove: "M4 13h16v6H4zM12 4v6M9 7h6",
   rowBelow: "M4 5h16v6H4zM12 14v6M9 17h6",

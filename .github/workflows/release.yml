@@ -71,6 +71,13 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          v="${TAG#v}"
+          notes=$(awk -v v="$v" '/^## /{p = ($2 == v); next} p' apps/desktop/CHANGELOG.md)
+          { echo "NOTES<<__NOTES_END__"; echo "$notes"; echo "__NOTES_END__"; } >> "$GITHUB_ENV"
+
       - name: Build and upload
         uses: tauri-apps/tauri-action@v0
         env:
@@ -85,6 +92,9 @@ jobs:
           tagName: ${{ env.TAG }}
           releaseName: "日色 __VERSION__"
           releaseBody: |
+            ## 新しくなったこと
+            ${{ env.NOTES }}
+
             ## ダウンロード
             - **Windows**: `Nisshoku_*_x64-setup.exe`（管理者権限なしで入ります）
             - **Linux**: `.AppImage`（実行権限を付けて起動）、`.deb`（Ubuntu・Debian）、`.rpm`（Fedora・openSUSE）

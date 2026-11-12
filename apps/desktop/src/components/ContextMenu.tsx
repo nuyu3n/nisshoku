@@ -6,6 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { Icon } from "./Icon";
 import { isMobile } from "../lib/mobile";
+import { useDrag } from "@use-gesture/react";
+import { haptic } from "../lib/haptics";
 
 export type MenuItem =
   | "sep"
@@ -83,6 +85,7 @@ export function contextMenu(items: () => MenuItem[]) {
       if (isTextLongPress(e)) return;
       e.preventDefault();
       e.stopPropagation();
+      haptic("medium");
       openMenu(e, items());
     },
   };
@@ -144,6 +147,31 @@ function MenuList({ items, x, y, above, before, alignRight, onClose, level, titl
   const [index, setIndex] = useState(() => items.findIndex((it) => typeof it === "object" && "label" in it && it.checked === true));
   const [sub, setSub] = useState<{ index: number; x: number; y: number; above: number; before: number } | null>(null);
   const actions = items.map((it, i) => (typeof it === "object" && "label" in it && !it.disabled ? i : -1)).filter((i) => i >= 0);
+
+  // Phones: the sheet goes away when pulled down (from its top, or anywhere
+  // when it is not scrolled), and springs back when let go early.
+  useDrag(
+    ({ movement: [, my], velocity: [, vy], direction: [, dy], last, first, memo }) => {
+      const el = ref.current;
+      if (!el) return memo;
+      const fromTop = first ? el.scrollTop <= 0 : (memo as boolean | undefined);
+      if (!fromTop) return fromTop;
+      const y = Math.max(0, my);
+      if (last) {
+        el.style.transition = "transform 0.2s var(--ease), opacity 0.2s";
+        if (y > 90 || (vy > 0.45 && dy > 0 && y > 20)) {
+          el.style.transform = "translateY(110%)";
+          el.style.opacity = "0";
+          window.setTimeout(onClose, 180);
+        } else el.style.transform = "";
+      } else {
+        el.style.transition = "none";
+        el.style.transform = y ? `translateY(${y}px)` : "";
+      }
+      return fromTop;
+    },
+    { target: ref, axis: "y", enabled: isMobile && level === 0, filterTaps: true, pointer: { touch: true } },
+  );
 
   // Keep the menu on screen.
   useLayoutEffect(() => {

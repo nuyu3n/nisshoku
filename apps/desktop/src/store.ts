@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, isoDate, type Folder, type NoteKind, type NoteSummary, type Scope, type Stats, type SyncStatus, type TagInfo } from "./api";
+import { api, isoDate, type Folder, type NoteKind, type NoteSummary, type Scope, type Stats, type SyncProgress, type SyncStatus, type TagInfo } from "./api";
 
 export interface Preferences {
   language: "ja" | "en";
@@ -73,8 +73,12 @@ export interface Preferences {
   syncAfterEdit: boolean;
   /** Days after which the trash is emptied; 0 for never. */
   trashRetentionDays: number;
+  /** Phones: minutes between syncs in the background, the app closed too; 0 for none. */
+  backgroundSyncMinutes: number;
   /** The notebook new tasks go to (outside a notebook's list); empty for the default one. */
   taskNotebook: string;
+  /** The version whose release notes were shown (lib/whatsnew.ts). */
+  lastSeenVersion: string;
   /** Notify to-dos when they fall due. */
   taskReminders: boolean;
   /** Days the note history is kept; 0 for always. */
@@ -134,7 +138,9 @@ export const defaultPreferences: Preferences = {
   trashRetentionDays: 30,
   historyDays: 90,
   taskReminders: true,
+  lastSeenVersion: "",
   taskNotebook: "",
+  backgroundSyncMinutes: 60,
   autoUpdateCheck: true,
 };
 
@@ -175,6 +181,8 @@ interface AppStore {
   settingsTab: string | null;
   prefs: Preferences;
   syncStatus: SyncStatus | null;
+  /** The running sync's progress (null when none). */
+  syncProgress: SyncProgress | null;
   stats: Stats | null;
   toasts: Toast[];
   /** Bumped when the open note must be reloaded (e.g. restored from history). */
@@ -252,6 +260,7 @@ export const useStore = create<AppStore>((set, get) => ({
   settingsTab: null,
   prefs: defaultPreferences,
   syncStatus: null,
+  syncProgress: null,
   stats: null,
   toasts: [],
   noteVersion: 0,

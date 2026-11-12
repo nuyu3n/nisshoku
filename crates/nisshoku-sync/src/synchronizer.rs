@@ -24,6 +24,31 @@ pub type SharedDb = Arc<Mutex<Database>>;
 /// between our read and our write.
 const MAX_ATTEMPTS: usize = 3;
 
+/// What a sync is doing, for showing its progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncStep {
+    /// Sending local changes.
+    Upload,
+    /// Sending local deletions.
+    Delete,
+    /// Receiving changes from the target (the total is not known ahead).
+    Download,
+    /// Transferring attachments' data.
+    Attachments,
+}
+
+/// Called as a sync goes: the step, items done in it, and their total (0
+/// when not known).
+#[derive(Clone)]
+pub struct ProgressHook(pub Arc<dyn Fn(SyncStep, usize, usize) + Send + Sync>);
+
+impl std::fmt::Debug for ProgressHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ProgressHook")
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SyncOptions {
     /// Identifies the target in `sync_items`, so that a profile can sync with
@@ -37,6 +62,8 @@ pub struct SyncOptions {
     pub master_password: Option<String>,
     /// Timing of the mutex that makes clients of this app sync one at a time.
     pub mutex_timing: MutexTiming,
+    /// Told of the progress of each sync.
+    pub progress: Option<ProgressHook>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
@@ -267,6 +294,12 @@ impl Synchronizer {
         self.options.target_id
     }
 
+    fn report_progress(&self, step: SyncStep, done: usize, total: usize) {
+        if let Some(ProgressHook(f)) = &self.options.progress {
+            f(step, done, total);
+        }
+    }
+
     fn resource_path(&self, r: &Resource) -> PathBuf {
         self.options.resource_dir.join(r.file_name())
     }
@@ -399,7 +432,9 @@ impl Synchronizer {
 
     async fn upload_step(&self, run: &mut Run) -> Result<()> {
         let pending = self.db().items_needing_sync(self.target())?;
-        for (item_type, id) in pending {
+        let total = pending.len();
+        for (i, (item_type, id)) in pending.into_iter().enumerate() {
+            self.report_progress(SyncStep::Upload, i, total);
             self.tick(run).await?;
             let result = self.upload_item(run, item_type, &id).await;
             self.record(run, result)?;
@@ -710,7 +745,9 @@ impl Synchronizer {
         // Children were recorded before their parents, so by the time a folder
         // is processed we know whether any of its contents were kept.
         let deleted = self.db().deleted_items(self.target())?;
-        for item in deleted {
+        let total = deleted.len();
+        for (i, item) in deleted.into_iter().enumerate() {
+            self.report_progress(SyncStep::Delete, i, total);
             self.tick(run).await?;
             let result = self.delete_remote_item(run, &item).await;
             self.record(run, result)?;
@@ -812,6 +849,7 @@ impl Synchronizer {
         // Folder deletions wait until everything else is applied, as the
         // deletions of their contents may come later, even in a later page.
         let mut deleted_folders = Vec::new();
+        let mut received = 0;
         loop {
             self.tick(run).await?;
             let synced_ids = self.db().synced_item_ids(self.target())?;
@@ -819,6 +857,8 @@ impl Synchronizer {
             let (deletions, updates): (Vec<_>, Vec<_>) =
                 page.changes.iter().partition(|c| c.deleted);
             for change in updates {
+                received += 1;
+                self.report_progress(SyncStep::Download, received, 0);
                 self.tick(run).await?;
                 let result = self.apply_change(run, change).await;
                 all_applied &= self.record(run, result)?;
@@ -980,7 +1020,9 @@ impl Synchronizer {
             .filter_map(|s| s.path.rsplit('/').next().map(str::to_string))
             .collect();
 
-        for r in resources {
+        let total = resources.len();
+        for (i, r) in resources.into_iter().enumerate() {
+            self.report_progress(SyncStep::Attachments, i, total);
             let path = self.resource_path(&r);
             let expected = r.extra.get(BLOB_HASH_PROP);
             match (path.exists(), on_target.contains(&r.id)) {

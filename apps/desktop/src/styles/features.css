@@ -1524,21 +1524,23 @@ button.tag-chip:hover {
 }
 .line-mirror > div::before {
   content: counter(ln);
-  position: absolute;
-  top: 0;
-  right: 100%;
-  margin-right: 16px;
+  /* In the line, taking no room: on the text's baseline. */
+  display: inline-block;
+  width: 4em;
+  margin-left: calc(-4em - var(--ln-gap, 16px));
+  margin-right: var(--ln-gap, 16px);
+  text-align: right;
   font-family: var(--font-ui);
+  font-size: 0.66em;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+  text-indent: 0;
   color: var(--text-3);
   opacity: 0.75;
-  transform: scale(0.72);
-  transform-origin: right center;
   white-space: nowrap;
 }
-.app.layout-narrow .line-mirror > div::before {
-  margin-right: 10px;
+.app.layout-narrow .line-mirror {
+  --ln-gap: 10px;
 }
 .line-mirror > div.current {
   background: var(--grid-soft);
@@ -1840,4 +1842,61 @@ button.tag-chip:hover {
 .app.mobile .math-keys button {
   white-space: nowrap;
   font-size: 15px;
+}
+
+/* What's new */
+.dialog.whats-new {
+  width: min(520px, calc(100vw - 32px));
+}
+.whats-new section + section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.whats-new h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--accent-text);
+}
+.whats-new ul {
+  margin: 0;
+  padding-left: 1.2em;
+  line-height: 1.75;
+}
+.whats-new li + li {
+  margin-top: 4px;
+}
+
+/* A sync's progress under the sync button: how far, or a moving bar when
+   the total is not known (receiving changes). */
+.sync-btn.syncing {
+  position: relative;
+  overflow: hidden;
+}
+.sync-btn.syncing::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(var(--accent), var(--accent)) left / calc(var(--sync-progress, 0.35) * 100%) 100% no-repeat, var(--border);
+  transition: background-size 0.25s var(--ease);
+}
+.sync-btn.syncing:not([style*="--sync-progress"])::after {
+  animation: sync-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes sync-indeterminate {
+  from {
+    background-position: -40% 0, 0 0;
+  }
+  to {
+    background-position: 140% 0, 0 0;
+  }
+}
+.sync-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

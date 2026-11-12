@@ -12,7 +12,7 @@ use nisshoku_sync::drivers::{
     BrowserLogin, FileSystemStorage, GoogleDriveConfig, GoogleDriveStorage, NextcloudConfig,
     NextcloudStorage, OAuthProvider, OAuthTokens, OneDriveConfig, OneDriveStorage,
 };
-use nisshoku_sync::{RemoteStorage, SyncError, SyncOptions, SyncReport, Synchronizer};
+use nisshoku_sync::{ProgressHook, RemoteStorage, SyncError, SyncOptions, SyncReport, Synchronizer};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_opener::OpenerExt;
@@ -577,7 +577,7 @@ pub async fn set_encryption<R: Runtime>(
 ) -> CmdResult<()> {
     let state = app.state::<AppState>();
     let _guard = state.sync_lock.lock().await;
-    let mut sync = synchronizer(&state)
+    let mut sync = synchronizer(&state, None)
         .await?
         .ok_or(tr("同期先が設定されていません", "No sync target is set up"))?;
     if enabled {
@@ -673,7 +673,7 @@ async fn storage(config: &TargetConfig) -> Result<Option<Arc<dyn RemoteStorage>>
     }))
 }
 
-async fn synchronizer(state: &AppState) -> Result<Option<Synchronizer>, String> {
+async fn synchronizer(state: &AppState, progress: Option<ProgressHook>) -> Result<Option<Synchronizer>, String> {
     let (config, target_id) = {
         let db = state.db();
         (target(&db), target_id(&db))
@@ -690,8 +690,188 @@ async fn synchronizer(state: &AppState) -> Result<Option<Synchronizer>, String> 
             client_type: if cfg!(target_os = "android") { "mobile" } else { "desktop" }.into(),
             master_password: secrets::get(secrets::MASTER_PASSWORD),
             mutex_timing: Default::default(),
+            progress,
         },
     )))
+}
+
+/// Only one sync at a time in the process: the window's, and (Android) the
+/// one run in the background with the app closed (`android.rs`), which has
+/// its own `AppState`.
+pub static SYNC_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Holds `SYNC_RUNNING` while alive.
+pub struct SyncSlot;
+
+impl SyncSlot {
+    pub fn take() -> Option<Self> {
+        use std::sync::atomic::Ordering::SeqCst;
+        SYNC_RUNNING.compare_exchange(false, true, SeqCst, SeqCst).ok().map(|_| SyncSlot)
+    }
+}
+
+impl Drop for SyncSlot {
+    fn drop(&mut self) {
+        SYNC_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// A sync of the profile in `state`, with the diary's duplicates merged.
+/// Errors come with whether they are about the encryption password.
+pub async fn sync_profile(state: &AppState, progress: Option<ProgressHook>) -> Result<SyncReport, (String, bool)> {
+    let sync = synchronizer(state, progress)
+        .await
+        .map_err(|m| (m, false))?
+        .ok_or_else(|| {
+            (
+                tr("同期先が設定されていません", "No sync target is set up").to_string(),
+                false,
+            )
+        })?;
+    let failed = |e: SyncError| {
+        let needs_password = matches!(
+            e,
+            SyncError::EncryptionPasswordRequired | SyncError::WrongEncryptionPassword
+        );
+        (describe(e), needs_password)
+    };
+    let mut report = sync.sync().await.map_err(failed)?;
+    // Entries of the same day written on two devices: merge them and
+    // send the merge right away, before the other device makes its own.
+    let merged = crate::diary::merge_duplicates(&state.db()).unwrap_or_else(|e| {
+        tracing::warn!("could not merge diary duplicates: {e}");
+        false
+    });
+    if merged {
+        let again = sync.sync().await.map_err(failed)?;
+        report.created_local += again.created_local;
+        report.updated_local += again.updated_local + 1;
+        report.deleted_local += again.deleted_local;
+        report.errors.extend(again.errors);
+    }
+    let _ = state
+        .db()
+        .set_setting(LAST_SYNC_SETTING, &nisshoku_core::time::now_ms().to_string());
+    Ok(report)
+}
+
+/// A sync with no window (Android's background sync, `android.rs`): the
+/// profile in `dir`, opened on its own. 0 synced, 1 failed, 2 nothing to do.
+#[allow(dead_code)]
+pub fn background_sync(dir: &std::path::Path) -> i32 {
+    let Some(_slot) = SyncSlot::take() else { return 2 };
+    secrets::init(dir);
+    let state = match crate::make_state(dir) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("background sync: could not open the profile: {e}");
+            return 1;
+        }
+    };
+    if target(&state.db()) == TargetConfig::None {
+        return 2;
+    }
+    let hook = progress_hook(state.data_dir.clone(), |_| {});
+    let result = tauri::async_runtime::block_on(sync_profile(&state, Some(hook)));
+    write_progress(&state.data_dir, &SyncProgress::new(None, 0, 0));
+    if let Err(e) = crate::widgets::write(&state.data_dir, &state.db()) {
+        tracing::warn!("background sync: could not update the widgets: {e}");
+    }
+    match result {
+        Ok(report) => {
+            // The window, if it opens, shows the new state.
+            let _ = state.db().set_setting("app.sync.backgroundChanged", if report.is_noop() { "0" } else { "1" });
+            0
+        }
+        Err((message, _)) => {
+            tracing::warn!("background sync failed: {message}");
+            1
+        }
+    }
+}
+
+/// The folder of the profile (for the Android background sync, which opens it on its own).
+#[tauri::command]
+pub fn profile_dir(state: State<'_, AppState>) -> String {
+    state.data_dir.to_string_lossy().into_owned()
+}
+
+/// Where a sync is: sent to the window (`sync-progress`) and, on Android,
+/// written for the notification of the sync service (`SyncService.kt`).
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncProgress {
+    /// `running` or `done`.
+    pub state: &'static str,
+    pub step: Option<nisshoku_sync::SyncStep>,
+    pub done: usize,
+    pub total: usize,
+    /// The notification's text, in the app's language.
+    pub text: String,
+    pub time: i64,
+}
+
+impl SyncProgress {
+    pub fn new(step: Option<nisshoku_sync::SyncStep>, done: usize, total: usize) -> Self {
+        use nisshoku_sync::SyncStep::*;
+        let what = match step {
+            Some(Upload) => tr("変更を送っています", "Sending changes"),
+            Some(Delete) => tr("削除を送っています", "Sending deletions"),
+            Some(Download) => tr("変更を受け取っています", "Receiving changes"),
+            Some(Attachments) => tr("添付ファイルを同期しています", "Syncing attachments"),
+            None => tr("同期が終わりました", "Sync finished"),
+        };
+        let text = if total > 0 {
+            format!("{what}（{done}/{total}）")
+        } else if done > 0 {
+            format!("{what}（{done}）")
+        } else {
+            what.to_string()
+        };
+        SyncProgress {
+            state: if step.is_some() { "running" } else { "done" },
+            step,
+            done,
+            total,
+            text,
+            time: nisshoku_core::time::now_ms(),
+        }
+    }
+}
+
+/// The file the Android sync service reads its notification from.
+pub fn progress_file(data_dir: &std::path::Path) -> std::path::PathBuf {
+    data_dir.join("sync-progress.json")
+}
+
+/// A progress hook that writes the file (throttled), and calls `also`.
+pub fn progress_hook(data_dir: std::path::PathBuf, also: impl Fn(&SyncProgress) + Send + Sync + 'static) -> ProgressHook {
+    let last = std::sync::Mutex::new(0i64);
+    ProgressHook(Arc::new(move |step, done, total| {
+        let p = SyncProgress::new(Some(step), done, total);
+        {
+            let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+            // A few updates a second are enough to watch.
+            if p.time - *last < 250 && done != 0 && done + 1 != total {
+                return;
+            }
+            *last = p.time;
+        }
+        if cfg!(target_os = "android") {
+            write_progress(&data_dir, &p);
+        }
+        also(&p);
+    }))
+}
+
+pub fn write_progress(data_dir: &std::path::Path, p: &SyncProgress) {
+    if let Ok(json) = serde_json::to_vec(p) {
+        let file = progress_file(data_dir);
+        let tmp = file.with_extension("tmp");
+        if std::fs::write(&tmp, json).is_ok() {
+            let _ = std::fs::rename(&tmp, &file);
+        }
+    }
 }
 
 fn describe(e: SyncError) -> String {
@@ -769,6 +949,10 @@ pub async fn run_sync<R: Runtime>(app: &AppHandle<R>) -> SyncStatus {
     let Ok(_guard) = state.sync_lock.try_lock() else {
         return state.status.lock().unwrap().clone();
     };
+    // (The background sync of Android, with the app closed, may be running.)
+    let Some(_slot) = SyncSlot::take() else {
+        return state.status.lock().unwrap().clone();
+    };
     use std::sync::atomic::Ordering::SeqCst;
     if background_limited() && !state.foreground.load(SeqCst) {
         // In the background: on return (see `set_foreground`).
@@ -786,46 +970,21 @@ pub async fn run_sync<R: Runtime>(app: &AppHandle<R>) -> SyncStatus {
     status.message = None;
     publish(app, status.clone());
 
-    // Errors come with whether they are about the encryption password.
-    let result: Result<SyncReport, (String, bool)> = async {
-        let sync = synchronizer(&state)
-            .await
-            .map_err(|m| (m, false))?
-            .ok_or_else(|| {
-                (
-                    tr("同期先が設定されていません", "No sync target is set up").to_string(),
-                    false,
-                )
-            })?;
-        let failed = |e: SyncError| {
-            let needs_password = matches!(
-                e,
-                SyncError::EncryptionPasswordRequired | SyncError::WrongEncryptionPassword
-            );
-            (describe(e), needs_password)
-        };
-        let mut report = sync.sync().await.map_err(failed)?;
-        // Entries of the same day written on two devices: merge them and
-        // send the merge right away, before the other device makes its own.
-        let merged = crate::diary::merge_duplicates(&state.db()).unwrap_or_else(|e| {
-            tracing::warn!("could not merge diary duplicates: {e}");
-            false
-        });
-        if merged {
-            let again = sync.sync().await.map_err(failed)?;
-            report.created_local += again.created_local;
-            report.updated_local += again.updated_local + 1;
-            report.deleted_local += again.deleted_local;
-            report.errors.extend(again.errors);
-        }
-        Ok(report)
+    let progress = {
+        let app = app.clone();
+        progress_hook(state.data_dir.clone(), move |p| {
+            let _ = app.emit("sync-progress", p);
+        })
+    };
+    let result = sync_profile(&state, Some(progress)).await;
+    if cfg!(target_os = "android") {
+        write_progress(&state.data_dir, &SyncProgress::new(None, 0, 0));
     }
-    .await;
+    let _ = app.emit("sync-progress", SyncProgress::new(None, 0, 0));
 
     match result {
         Ok(report) => {
             let now = nisshoku_core::time::now_ms();
-            let _ = state.db().set_setting(LAST_SYNC_SETTING, &now.to_string());
             let changed_locally =
                 report.created_local + report.updated_local + report.deleted_local > 0;
             status = SyncStatus {

@@ -288,6 +288,9 @@
   text-align: center;
   overflow-x: auto;
 }
+.prose [data-type="block-math"] .katex-display {
+  margin: 0; /* the block keeps its own margin */
+}
 .prose .katex {
   font-size: 1.05em;
 }

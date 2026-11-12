@@ -1,0 +1,697 @@
+/* Phones: sizes for fingers and motion for touches, on top of the layout's
+   phone rules (layout.css). Menus and dialogs are outside .app's panes but
+   inside .app, so `.app.mobile` reaches them. */
+
+/* --- Sizes ---------------------------------------------------------------- */
+
+.app.mobile .btn {
+  min-height: 44px;
+  padding-inline: 16px;
+  font-size: 15px;
+}
+.app.mobile .dialog-foot .btn {
+  min-width: 88px;
+}
+.app.mobile .input,
+.app.mobile input[type="text"],
+.app.mobile input[type="search"],
+.app.mobile input[type="password"],
+.app.mobile textarea.input {
+  min-height: 44px;
+  font-size: 16px; /* smaller text makes Android zoom in on focus */
+}
+.app.mobile input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+.app.mobile input[type="checkbox"]::after {
+  width: 14px;
+  height: 14px;
+}
+.app.mobile .due-chip,
+.app.mobile .tag-chip,
+.app.mobile .chip {
+  min-height: 34px;
+  padding-inline: 12px;
+  font-size: 13.5px;
+}
+.app.mobile .task-check {
+  width: 30px;
+  height: 30px;
+}
+.app.mobile .task-row {
+  min-height: 56px;
+}
+.app.mobile .segmented button {
+  min-height: 40px;
+  padding-inline: 14px;
+}
+.app.mobile .sync-btn {
+  height: 44px;
+  font-size: 14px;
+}
+.app.mobile .format-bar button {
+  min-width: 46px;
+  min-height: 46px;
+}
+.app.mobile .menu:not(.slash-menu) .menu-item {
+  min-height: 50px;
+}
+.app.mobile .switch {
+  transform: scale(1.15);
+  transform-origin: right center;
+}
+
+/* The sheet's grip: says it can be pulled down. */
+.app.mobile .menu:not(.slash-menu)::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 8px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.app.mobile .menu:not(.slash-menu) {
+  touch-action: pan-y;
+}
+
+/* --- Motion ---------------------------------------------------------------- */
+
+/* Pressed things give way under the finger. */
+@media (prefers-reduced-motion: no-preference) {
+  .app.mobile :is(.btn, .icon-btn, .chip, .tag-chip, .due-chip, .nav-item, .format-bar button, .segmented button, .sync-btn, .task-check, .math-keys button) {
+    transition: transform 0.12s var(--ease), background-color 0.15s;
+  }
+  .app.mobile :is(.btn, .icon-btn, .chip, .tag-chip, .due-chip, .format-bar button, .segmented button, .task-check, .math-keys button):active {
+    transform: scale(0.94);
+  }
+  .app.mobile :is(.nav-item, .note-item, .task-row, .menu-item):active {
+    background: var(--bg-active);
+    transition: background-color 0s;
+  }
+  .app.mobile .note-item {
+    transition: background-color 0.25s, transform 0.12s var(--ease);
+  }
+  .app.mobile .note-item:active {
+    transform: scale(0.985);
+  }
+  /* A tick pops. */
+  .app.mobile input[type="checkbox"]:checked::after {
+    animation: tick-pop 0.28s var(--ease);
+  }
+  .app.mobile .task-row.ticked .task-check {
+    animation: tick-pop 0.3s var(--ease);
+  }
+  /* Toasts and dialogs come up from the bottom edge of their place. */
+  .app.mobile .toast {
+    animation: toast-up 0.24s var(--ease);
+  }
+}
+@keyframes tick-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes toast-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+
+/* --- Math sheet (components/MathSheet.tsx) ---------------------------------- */
+
+.ms-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.ms-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 14, 8, 0.36);
+}
+.ms-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - var(--inset-top, 0px) - 12px);
+  height: calc(100% - var(--inset-top, 0px) - 12px);
+  background: var(--bg-elev);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -12px 48px rgba(20, 14, 8, 0.28);
+  padding-bottom: var(--inset-bottom, 0px);
+  overflow: hidden;
+}
+.ms-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 6px;
+}
+.ms-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+.ms-head-btn {
+  min-width: 76px;
+  height: 44px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 15px;
+}
+.ms-head-btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.ms-head-btn:active {
+  transform: scale(0.95);
+}
+.ms-preview {
+  flex: none;
+  margin: 4px 14px 10px;
+  min-height: 104px;
+  max-height: 30vh;
+  padding: 18px 16px;
+  border-radius: 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: auto hidden;
+}
+.ms-formula {
+  font-size: 22px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+.ms-formula .katex-display {
+  margin: 0;
+}
+.ms-empty {
+  color: var(--text-3);
+  font-size: 14px;
+}
+.ms-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.ms-input {
+  flex: none;
+  margin: 0 14px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.ms-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.ms-input textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  max-height: 22vh;
+  padding: 12px 14px 4px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.ms-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 6px;
+}
+.ms-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 20px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13.5px;
+  transition: transform 0.12s var(--ease), background-color 0.15s;
+}
+.ms-tool.icon {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.ms-tool.on {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.ms-tool:active {
+  transform: scale(0.92);
+}
+.ms-tool svg {
+  width: 20px;
+  height: 20px;
+}
+.ms-tray {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+.ms-groups {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ms-groups::-webkit-scrollbar {
+  display: none;
+}
+.ms-group {
+  position: relative;
+  flex: none;
+  height: 38px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 19px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 14px;
+}
+.ms-group.on {
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.ms-group-ink {
+  position: absolute;
+  inset: 0;
+  border-radius: 19px;
+  background: var(--accent);
+}
+.ms-group-label {
+  position: relative;
+}
+.ms-keys {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-auto-rows: 56px;
+  gap: 8px;
+  padding: 4px 12px 14px;
+  align-content: start;
+}
+.ms-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 var(--border-strong), 0 1px 3px rgba(20, 14, 8, 0.08);
+  color: var(--text);
+  font-size: 17px;
+  overflow: hidden;
+  padding: 0 4px;
+}
+.ms-key .katex {
+  font-size: 1em;
+  white-space: nowrap;
+}
+.ms-key:active {
+  background: var(--accent-soft);
+}
+.ms-delete {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  margin: 6px 14px 10px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: 14.5px;
+}
+
+/* --- Tab bar, floating button, swipes, pull to sync (components/MobileUI.tsx) --- */
+
+.app.mobile {
+  --tab-h: 64px;
+}
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  height: calc(var(--tab-h) + var(--inset-bottom, 0px));
+  padding: 6px 6px var(--inset-bottom, 0px);
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-top: 1px solid var(--border);
+}
+.tab-item {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-item.on {
+  color: var(--accent-text);
+}
+.tab-ink {
+  position: absolute;
+  top: 2px;
+  width: 58px;
+  height: 32px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+}
+.tab-icon {
+  position: relative;
+  display: flex;
+}
+.tab-icon svg {
+  width: 23px;
+  height: 23px;
+}
+.tab-item.on .tab-icon svg {
+  stroke-width: 2.1;
+}
+.tab-label {
+  position: relative;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.tab-badge {
+  position: absolute;
+  top: -5px;
+  right: -11px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+/* Room for the tab bar under the lists. */
+.app.mobile.with-tabs .note-list,
+.app.mobile.with-tabs .sidebar {
+  padding-bottom: calc(var(--tab-h) + var(--inset-bottom, 0px));
+}
+.app.mobile.with-tabs .toasts {
+  bottom: calc(var(--tab-h) + var(--inset-bottom, 0px) + 12px);
+}
+
+.fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(var(--tab-h) + var(--inset-bottom, 0px) + 18px);
+  z-index: 25;
+  width: 60px;
+  height: 60px;
+  border: none;
+  border-radius: 20px;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent), 0 2px 6px rgba(20, 14, 8, 0.18);
+  -webkit-tap-highlight-color: transparent;
+}
+.fab svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 2.2;
+}
+.app.mobile .list-scroll {
+  padding-bottom: 96px; /* the last row clears the floating button */
+}
+
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+}
+.swipe-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+.swipe-bg.pin {
+  background: var(--accent);
+  justify-content: flex-start;
+}
+.swipe-bg.trash {
+  background: var(--danger);
+  justify-content: flex-end;
+}
+.swipe-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.swipe-action svg {
+  width: 22px;
+  height: 22px;
+}
+.swipe-front {
+  position: relative;
+  background: var(--bg-list);
+  touch-action: pan-y;
+}
+/* Phones: one flat list with hairlines; the note just left keeps only a soft tint
+   (the raised card is for side-by-side panes). */
+.app.mobile.layout-narrow .note-item {
+  border-radius: 0;
+  margin-bottom: 0;
+  padding: 14px 16px;
+}
+.app.mobile.layout-narrow .note-item.active {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: none;
+}
+.app.mobile.layout-narrow .note-item.active::before {
+  display: none;
+}
+.app.mobile.layout-narrow .swipe-row + .swipe-row {
+  border-top: 1px solid var(--border);
+}
+/* Phones: the row's actions are a swipe or a long press away. */
+.app.mobile .note-item .item-more {
+  display: none;
+}
+/* Tags in list rows stay small (the bigger chips are for the editor). */
+.app.mobile .note-item .tag-chip {
+  min-height: 0;
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
+.pull-sync {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pull-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pull-indicator {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+  pointer-events: none;
+}
+.pull-indicator svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(calc(var(--pull, 0px) * 4deg / 1px));
+}
+.pull-indicator.ready,
+.pull-indicator.busy {
+  color: var(--accent-text);
+}
+.pull-indicator.busy svg {
+  transform: none;
+}
+/* The floating button makes new things on phones. */
+.app.mobile.layout-narrow .list-head .icon-btn[data-new] {
+  display: none;
+}
+
+/* --- Settings as a page of its own (phones) ------------------------------- */
+
+.app.mobile .settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 4px 20px;
+}
+.app.mobile .settings-head h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.app.mobile .dialog.large .dialog-foot {
+  display: none;
+}
+.app.mobile .settings-nav {
+  gap: 8px !important;
+  padding: 8px 16px 12px !important;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.app.mobile .settings-nav::-webkit-scrollbar {
+  display: none;
+}
+.app.mobile .settings-nav .nav-item {
+  flex: none;
+  height: 40px !important;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: var(--bg-hover);
+  font-size: 14.5px !important;
+  gap: 8px;
+}
+.app.mobile .settings-nav .nav-item svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+.app.mobile .settings-nav .nav-item.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.app.mobile .settings-nav .nav-item.active svg {
+  color: var(--on-accent);
+}
+.app.mobile .settings-main {
+  padding: 8px 20px 24px !important;
+}
+.app.mobile .settings-main > h3:first-child {
+  display: none; /* the pill says it */
+}
+/* With the tab bar: above the sheet, and room for it. */
+.app.mobile.with-tabs .tab-bar {
+  z-index: 50;
+}
+.app.mobile.with-tabs .dialog.large {
+  padding-bottom: calc(var(--tab-h) + var(--inset-bottom, 0px));
+}
+.app.mobile .settings-nav,
+.app.mobile .settings-head {
+  background: var(--bg-elev);
+}
+
+/* Adding a task on phones: the text on its own line, its options under it. */
+.app.mobile .task-add {
+  flex-wrap: wrap;
+  row-gap: 10px;
+  padding: 10px 12px;
+}
+.app.mobile .task-add > svg {
+  display: none;
+}
+.app.mobile .task-add .task-input {
+  flex: 1 1 100%;
+  min-height: 40px;
+  font-size: 16px;
+}
+.app.mobile .task-add .task-add-btn {
+  margin-left: auto;
+  min-width: 84px;
+  border-radius: 20px;
+}
+.ms-delete svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Touch screens: a hairline grip that a tap never leaves "hovered" (a sticky
+   :hover kept the wide desktop bar dark beside the text). */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-thumb,
+  *:hover::-webkit-scrollbar-thumb {
+    border: 0;
+    background-color: color-mix(in srgb, var(--border-strong) 45%, transparent);
+  }
+}

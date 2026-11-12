@@ -72,6 +72,16 @@ export interface ResourceFile {
   size: number;
 }
 
+/** Where a sync is (sync.rs `SyncProgress`). */
+export interface SyncProgress {
+  state: "running" | "done";
+  step: "upload" | "delete" | "download" | "attachments" | null;
+  done: number;
+  total: number;
+  text: string;
+  time: number;
+}
+
 export interface StorageInfo {
   databaseBytes: number;
   resourceBytes: number;
@@ -419,6 +429,7 @@ export const api = {
   setEncryption: (enabled: boolean, password?: string) =>
     call<void>("set_encryption", { enabled, password: password ?? null }),
   setFolderColor: (id: string, color: string | null) => call<void>("set_folder_color", { id, color }),
+  profileDir: () => call<string>("profile_dir"),
   setForeground: (visible: boolean) => call<void>("set_foreground", { visible }),
   syncNow: () => call<SyncStatus>("sync_now"),
   latestRelease: () => call<Release>("latest_release"),

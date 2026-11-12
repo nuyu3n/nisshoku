@@ -31,4 +31,7 @@
     <string name="process_text_label">日色にメモ</string>
     <string name="tile_diary">今日の日記</string>
     <string name="tile_diary_subtitle">日色</string>
+    <string name="sync_running">同期しています</string>
+    <string name="sync_channel">同期</string>
+    <string name="sync_short">同期</string>
 </resources>

@@ -137,7 +137,7 @@ pub(crate) fn summary(n: &Note) -> NoteSummary {
         excerpt: note_excerpt(&n.title, &n.body, 90),
         char_count: count_chars(&n.body),
         created_time: n.user_created_time.max(n.created_time),
-        updated_time: n.user_updated_time.max(n.updated_time),
+        updated_time: shown_updated(n),
         is_conflict: n.is_conflict != 0,
         deleted_time: n.deleted_time,
         diary_date: diary_date(n),
@@ -155,6 +155,12 @@ pub(crate) fn summary(n: &Note) -> NoteSummary {
     }
 }
 
+/// When the note was last edited, as lists show it: its user time (which
+/// metadata changes such as a pin or a move leave alone), else the sync time.
+fn shown_updated(n: &Note) -> i64 {
+    if n.user_updated_time > 0 { n.user_updated_time } else { n.updated_time }
+}
+
 pub fn is_pinned(n: &Note) -> bool {
     userdata::get(&n.user_data, "pinned").and_then(|v| v.as_bool()) == Some(true)
 }
@@ -170,7 +176,7 @@ pub(crate) fn dto(n: &Note) -> NoteDto {
         title: n.title.clone(),
         body: n.body.clone(),
         created_time: n.user_created_time.max(n.created_time),
-        updated_time: n.user_updated_time.max(n.updated_time),
+        updated_time: shown_updated(n),
         is_conflict: n.is_conflict != 0,
         conflict_original_id: n.conflict_original_id.clone(),
         deleted_time: n.deleted_time,

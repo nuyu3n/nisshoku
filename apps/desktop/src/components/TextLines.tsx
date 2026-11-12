@@ -43,6 +43,7 @@ export const TextLines = forwardRef<TextLinesHandle, Props>(function TextLines({
   const autoPair = useStore((s) => s.prefs.autoPair);
   const [line, setLine] = useState(-1);
   const auto = useRef<number | null>(null); // offset of an automatic closer
+  const lastPaired = useRef<string | null>(null); // the composition last given a closer
 
   // Height follows the content. Measuring from "auto" lays out the whole
   // text again, which is slow for long notes: growing needs no reset, so
@@ -205,6 +206,13 @@ export const TextLines = forwardRef<TextLinesHandle, Props>(function TextLines({
       }
       const close = openBracket(data);
       if (!close || !fits(text[s])) return;
+      // Android sends compositionend again for the same committed text (when
+      // the keyboard finishes composing, on a selection change…): the closer
+      // added the first time is already there — no second one (【】】).
+      if (text[s] === close) return;
+      const key = `${s}:${data}:${text.length}`;
+      if (lastPaired.current === key) return;
+      lastPaired.current = `${s}:${data}:${text.length + close.length}`;
       typeText(el, close, s, s);
       el.setSelectionRange(s, s);
       auto.current = s;
