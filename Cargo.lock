@@ -2907,7 +2907,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nisshoku-app"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "nisshoku-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "nisshoku-sync"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aes 0.9.4",
  "aes-gcm",
