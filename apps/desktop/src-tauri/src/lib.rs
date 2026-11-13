@@ -3,152 +3,103 @@
 
 #[cfg(target_os = "android")]
 mod android;
-mod clip;
-mod diary;
-mod epub;
-mod features;
-mod files;
-mod i18n;
-mod notes;
-mod secrets;
-pub mod state;
-mod storage;
-mod sync;
-mod tasks;
-mod text;
-mod updates;
-mod userdata;
-mod widgets;
-mod works;
+mod host;
 
-use std::sync::{Arc, Mutex};
-
-use nisshoku_core::Database;
+use nisshoku_engine::{App, Call};
+use serde_json::Value;
 use tauri::Manager;
+use tauri::ipc::{Invoke, InvokeBody};
 
-use state::AppState;
+pub use nisshoku_engine::Ctx;
 
-/// The commands callable from the window.
-pub fn handlers<R: tauri::Runtime>()
--> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
-    tauri::generate_handler![
-        notes::list_folders,
-        notes::create_folder,
-        notes::rename_folder,
-        notes::move_folder,
-        notes::set_folder_icon,
-        notes::set_folder_color,
-        notes::export_all,
-        notes::trash_folder,
-        notes::list_notes,
-        notes::get_note,
-        notes::create_note,
-        notes::save_note,
-        notes::move_note,
-        notes::set_note_goal,
-        notes::duplicate_note,
-        notes::trash_note,
-        notes::restore_note,
-        notes::delete_note_forever,
-        notes::empty_trash,
-        notes::open_diary,
-        notes::diary_month,
-        notes::diary_streak,
-        notes::list_revisions,
-        notes::revision_content,
-        notes::restore_revision,
-        notes::save_snapshot,
-        notes::clear_history,
-        notes::resolve_conflict,
-        storage::backup_now,
-        storage::open_backups,
-        storage::storage_info,
-        storage::delete_unused_resources,
-        features::list_tags,
-        features::set_note_tags,
-        features::rename_tag,
-        features::delete_tag,
-        features::set_note_pinned,
-        features::set_note_todo,
-        features::set_todo_completed,
-        features::set_notes_order,
-        features::set_note_order,
-        features::list_backlinks,
-        features::save_as_template,
-        features::list_templates,
-        features::save_resource,
-        features::save_resource_bytes,
-        features::resource_files,
-        features::import_resource,
-        features::open_resource,
-        features::clip_url,
-        diary::diary_entries,
-        diary::on_this_day,
-        diary::set_diary_meta,
-        diary::diary_stats,
-        diary::diary_export,
-        diary::set_diary_events,
-        diary::get_diary_memo,
-        diary::set_diary_memo,
-        notes::list_comments,
-        notes::add_comment,
-        notes::update_comment,
-        notes::delete_comment,
-        notes::get_stats,
-        notes::get_preferences,
-        notes::set_preferences,
-        notes::write_text_file,
-        sync::get_sync_settings,
-        sync::set_local_target,
-        sync::disconnect_sync,
-        sync::nextcloud_login_start,
-        sync::nextcloud_login_wait,
-        sync::nextcloud_connect,
-        sync::gdrive_login,
-        sync::onedrive_login,
-        sync::set_master_password,
-        sync::set_encryption,
-        sync::sync_now,
-        sync::set_foreground,
-        sync::profile_dir,
-        tasks::create_task,
-        tasks::set_todo_due,
-        widgets::refresh_widgets,
-        widgets::apply_widget_actions,
-        updates::latest_release,
-        updates::install_kind,
-        works::set_work,
-        works::work_overview,
-        works::set_note_kind,
-        works::set_chapter_meta,
-        works::create_work_note,
-        works::get_character,
-        works::set_character,
-        works::open_plot,
-        works::set_plot,
-        works::work_manuscript,
-        epub::export_epub,
-    ]
+/// How this copy of the app was installed, which decides how it updates:
+/// `nsis`, `msi`, `appimage`, `deb`, `rpm`, `android`, or `dev` for a build
+/// that is not an installed package.
+#[tauri::command]
+fn install_kind() -> &'static str {
+    if cfg!(target_os = "android") {
+        return "android";
+    }
+    if cfg!(debug_assertions) {
+        return "dev";
+    }
+    match tauri::utils::platform::bundle_type() {
+        Some(tauri::utils::config::BundleType::Nsis) => "nsis",
+        Some(tauri::utils::config::BundleType::Msi) => "msi",
+        Some(tauri::utils::config::BundleType::AppImage) => "appimage",
+        Some(tauri::utils::config::BundleType::Deb) => "deb",
+        Some(tauri::utils::config::BundleType::Rpm) => "rpm",
+        _ => "dev",
+    }
 }
 
-/// The app state over the profile in `dir`.
-pub fn make_state(dir: &std::path::Path) -> Result<AppState, Box<dyn std::error::Error>> {
-    let resource_dir = dir.join("resources");
-    std::fs::create_dir_all(&resource_dir)?;
-    let db = Database::open(dir.join("database.sqlite"))?;
-    let status = sync::load_status(&db);
-    notes::apply_preferences(&notes::preferences(&db));
-    Ok(AppState {
-        db: Arc::new(Mutex::new(db)),
-        data_dir: dir.to_path_buf(),
-        resource_dir,
-        sync_lock: tokio::sync::Mutex::new(()),
-        status: Mutex::new(status),
-        nextcloud_flow: Mutex::new(None),
-        foreground: std::sync::atomic::AtomicBool::new(true),
-        went_background: std::sync::atomic::AtomicBool::new(false),
-        retry_on_return: std::sync::atomic::AtomicBool::new(false),
-    })
+/// The commands callable from the window: the engine's (by name, see
+/// `nisshoku_engine::dispatch`), and the few that need Tauri itself.
+pub fn handlers<R: tauri::Runtime>()
+-> impl Fn(Invoke<R>) -> bool + Send + Sync + 'static {
+    let own: Box<dyn Fn(Invoke<R>) -> bool + Send + Sync> =
+        Box::new(tauri::generate_handler![install_kind]);
+    move |invoke: Invoke<R>| {
+        let cmd = invoke.message.command().to_string();
+        let raw = cmd == nisshoku_engine::dispatch::RAW_SAVE_RESOURCE;
+        if !raw && !nisshoku_engine::COMMANDS.contains(&cmd.as_str()) {
+            return own(invoke);
+        }
+        let Some(app) = invoke
+            .message
+            .webview()
+            .try_state::<App>()
+            .map(|s| s.inner().clone())
+        else {
+            invoke.resolver.reject("the profile is not open");
+            return true;
+        };
+        let reply = if raw {
+            let header = |name: &str| {
+                invoke
+                    .message
+                    .headers()
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string()
+            };
+            match invoke.message.payload() {
+                InvokeBody::Raw(data) => Call::Done(nisshoku_engine::dispatch::invoke_raw(
+                    &app,
+                    data.clone(),
+                    &header("x-name"),
+                    &header("x-mime"),
+                )),
+                InvokeBody::Json(_) => Call::Done(Err("expected the file's bytes".into())),
+            }
+        } else {
+            let args = match invoke.message.payload() {
+                InvokeBody::Json(v) => v.clone(),
+                InvokeBody::Raw(_) => Value::Null,
+            };
+            nisshoku_engine::call(&app, &cmd, args)
+        };
+        let resolver = invoke.resolver;
+        match reply {
+            Call::Done(Ok(v)) => resolver.resolve(v),
+            Call::Done(Err(e)) => resolver.reject(e),
+            Call::Later(f) => {
+                tauri::async_runtime::spawn(async move {
+                    match f.await {
+                        Ok(v) => resolver.resolve(v),
+                        Err(e) => resolver.reject(e),
+                    }
+                });
+            }
+        }
+        true
+    }
+}
+
+/// The app over the profile in `dir`, for the window (or the tests) to manage.
+pub fn make_state(dir: &std::path::Path) -> Result<App, Box<dyn std::error::Error>> {
+    nisshoku_engine::Ctx::open(dir, "app.nisshoku.desktop")
 }
 
 /// Shows the main window (created hidden, `tauri.conf.json`) in the colour
@@ -157,7 +108,7 @@ pub fn make_state(dir: &std::path::Path) -> Result<AppState, Box<dyn std::error:
 fn show_main_window(app: &tauri::App) {
     use tauri::window::Color;
     let Some(window) = app.get_webview_window("main") else { return };
-    let theme = notes::preferences(&app.state::<AppState>().db())
+    let theme = nisshoku_engine::notes::preferences(&app.state::<App>().state.db())
         .get("theme")
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
@@ -217,9 +168,9 @@ pub fn run() {
                     tracing::error!("could not set up certificate checks: {e}");
                 }
             }
-            secrets::init(&profile);
-            std::fs::create_dir_all(&profile)?;
-            app.manage(make_state(&profile)?);
+            let ctx = nisshoku_engine::Ctx::open(&profile, &app.config().identifier)?;
+            ctx.set_host(std::sync::Arc::new(host::TauriHost(app.handle().clone())));
+            app.manage(ctx.clone());
             // Attachments are shown from the profile's resources, wherever
             // the profile is (the configured scope covers the default one).
             if let Err(e) = app
@@ -228,27 +179,10 @@ pub fn run() {
             {
                 tracing::warn!("could not allow the resource folder: {e}");
             }
-
-            // Old trash, then background syncs at the interval of the preferences.
-            {
-                let state = app.state::<AppState>();
-                let db = state.db();
-                let days = notes::preferences(&db)
-                    .get("trashRetentionDays")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(30);
-                if let Err(e) = notes::purge_trash(&db, days) {
-                    tracing::warn!("could not empty old trash: {e}");
-                }
-                if let Err(e) = storage::daily_backup(&db, &state.data_dir) {
-                    tracing::warn!("could not back up the database: {e}");
-                }
-            }
             show_main_window(app);
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(sync::background(handle));
-            tauri::async_runtime::spawn(notes::keep_history(app.handle().clone()));
-            tauri::async_runtime::spawn(tasks::remind_due(app.handle().clone()));
+            // Old trash, the daily backup, then background syncs at the
+            // interval of the preferences, the history, the reminders.
+            tauri::async_runtime::block_on(async move { nisshoku_engine::start(&ctx) });
             Ok(())
         })
         .invoke_handler(handlers())

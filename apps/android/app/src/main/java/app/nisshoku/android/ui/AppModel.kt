@@ -1,0 +1,272 @@
+package app.nisshoku.android.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import app.nisshoku.android.Lang
+import app.nisshoku.android.engine.Api
+import app.nisshoku.android.engine.Folder
+import app.nisshoku.android.engine.Nisshoku
+import app.nisshoku.android.engine.NoteSummary
+import app.nisshoku.android.engine.Scope
+import app.nisshoku.android.engine.SyncProgress
+import app.nisshoku.android.engine.SyncSettings
+import app.nisshoku.android.engine.SyncStatus
+import app.nisshoku.android.sync.SyncService
+import app.nisshoku.android.sync.SyncWorker
+import app.nisshoku.android.trNow
+import app.nisshoku.android.ui.theme.ThemeSettings
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import java.time.LocalDate
+
+/** A message for the snackbar, with an optional action. */
+data class Message(val text: String, val action: String? = null, val run: (suspend () -> Unit)? = null)
+
+data class HomeState(
+    val ready: Boolean = false,
+    val folders: List<Folder> = emptyList(),
+    val scope: Scope = Scope.All,
+    val notes: List<NoteSummary> = emptyList(),
+    val loading: Boolean = true,
+)
+
+/** The app's state over the engine, for all screens. */
+class AppModel(app: Application) : AndroidViewModel(app) {
+    private val _home = MutableStateFlow(HomeState())
+    val home: StateFlow<HomeState> = _home.asStateFlow()
+
+    private val _prefs = MutableStateFlow(JsonObject(emptyMap()))
+    val prefs: StateFlow<JsonObject> = _prefs.asStateFlow()
+
+    private val _sync = MutableStateFlow(SyncSettings())
+    val sync: StateFlow<SyncSettings> = _sync.asStateFlow()
+
+    private val _progress = MutableStateFlow<SyncProgress?>(null)
+    val progress: StateFlow<SyncProgress?> = _progress.asStateFlow()
+
+    private val _messages = Channel<Message>(Channel.BUFFERED)
+    val messages = _messages.receiveAsFlow()
+
+    private var loadJob: Job? = null
+
+    /** Notes were written since the last sync (sent in the background on leaving). */
+    private var unsent = false
+
+    init {
+        viewModelScope.launch { start() }
+        viewModelScope.launch {
+            Nisshoku.events.collect { e ->
+                when (e.name) {
+                    "sync-status" -> runCatching { Nisshoku.json.decodeFromString<SyncStatus>(e.payload) }.getOrNull()?.let { onStatus(it) }
+                    "sync-progress" -> {
+                        val p = runCatching { Nisshoku.json.decodeFromString<SyncProgress>(e.payload) }.getOrNull()
+                        _progress.value = p?.takeIf { it.state == "running" }
+                    }
+                    "data-changed" -> reload()
+                }
+            }
+        }
+    }
+
+    private suspend fun start() {
+        try {
+            loadPrefs()
+            _sync.value = Api.syncSettings()
+            reload()
+            _home.update { it.copy(ready = true) }
+            if (_sync.value.target.kind != "none") {
+                SyncWorker.schedule(getApplication(), pref("backgroundSyncMinutes")?.jsonPrimitive?.intOrNull ?: 60)
+            }
+        } catch (e: Exception) {
+            _home.update { it.copy(ready = true, loading = false) }
+            say(e.message ?: "")
+        }
+    }
+
+    private fun onStatus(status: SyncStatus) {
+        val before = _sync.value.status
+        _sync.update { it.copy(status = status) }
+        if (status.state == "syncing" && before.state != "syncing") SyncService.start(getApplication())
+        if (status.state == "idle" && status.lastSync != before.lastSync) unsent = false
+        if (status.state == "error" && before.state != "error" && !status.message.isNullOrEmpty()) say(status.message)
+    }
+
+    fun say(text: String, action: String? = null, run: (suspend () -> Unit)? = null) {
+        _messages.trySend(Message(text, action, run))
+    }
+
+    // ---------------------------------------------------------------------
+    // Preferences
+
+    fun pref(key: String): JsonElement? = _prefs.value[key]
+
+    fun prefString(key: String, default: String): String =
+        (_prefs.value[key] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: default
+
+    fun prefBool(key: String, default: Boolean): Boolean = (_prefs.value[key] as? JsonPrimitive)?.booleanOrNull ?: default
+
+    fun prefInt(key: String, default: Int): Int = (_prefs.value[key] as? JsonPrimitive)?.intOrNull ?: default
+
+    private suspend fun loadPrefs() {
+        val prefs = Api.preferences()
+        _prefs.value = prefs
+        (prefs["language"] as? JsonPrimitive)?.content?.let { Lang.english = it == "en" }
+    }
+
+    fun setPref(key: String, value: JsonElement) {
+        val next = JsonObject(_prefs.value + (key to value))
+        _prefs.value = next
+        if (key == "language") Lang.english = (value as? JsonPrimitive)?.content == "en"
+        viewModelScope.launch {
+            try {
+                Api.setPreferences(next)
+                if (key == "backgroundSyncMinutes") SyncWorker.schedule(getApplication(), prefInt(key, 60))
+            } catch (e: Exception) {
+                say(e.message ?: "")
+            }
+        }
+    }
+
+    fun themeSettings(prefs: JsonObject): ThemeSettings = ThemeSettings(
+        theme = (prefs["theme"] as? JsonPrimitive)?.content ?: "system",
+        accent = (prefs["accent"] as? JsonPrimitive)?.content ?: "orange",
+        dynamicColor = (prefs["materialYou"] as? JsonPrimitive)?.booleanOrNull ?: true,
+    )
+
+    // ---------------------------------------------------------------------
+    // Notebooks and notes
+
+    fun setScope(scope: Scope) {
+        if (scope == _home.value.scope) return
+        _home.update { it.copy(scope = scope, notes = emptyList(), loading = true) }
+        reload()
+    }
+
+    fun reload() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            try {
+                val scope = _home.value.scope
+                val folders = Api.folders()
+                val notes = Api.notes(scope)
+                if (scope == _home.value.scope) _home.update { it.copy(folders = folders, notes = notes, loading = false) }
+            } catch (e: Exception) {
+                _home.update { it.copy(loading = false) }
+                say(e.message ?: "")
+            }
+        }
+    }
+
+    /** A new note in the notebook shown (or the default one); its id. */
+    suspend fun newNote(title: String? = null, body: String? = null): String? = try {
+        val folder = (_home.value.scope as? Scope.InFolder)?.id
+        Api.createNote(folder, title, body).id.also { unsent = true; reload() }
+    } catch (e: Exception) {
+        say(e.message ?: ""); null
+    }
+
+    suspend fun newTask(title: String): Boolean = try {
+        Api.createTask(title, (_home.value.scope as? Scope.InFolder)?.id)
+        unsent = true
+        reload()
+        true
+    } catch (e: Exception) {
+        say(e.message ?: ""); false
+    }
+
+    /** Today's diary entry (made if needed); its id. */
+    suspend fun todaysDiary(): String? = try {
+        Api.openDiary(LocalDate.now().toString()).id.also { reload() }
+    } catch (e: Exception) {
+        say(e.message ?: ""); null
+    }
+
+    fun trash(note: NoteSummary) {
+        viewModelScope.launch {
+            try {
+                Api.trashNote(note.id)
+                unsent = true
+                _home.update { s -> s.copy(notes = s.notes.filter { it.id != note.id }) }
+                say(trNow("ゴミ箱に移動しました", "Moved to the trash"), trNow("元に戻す", "Undo")) {
+                    Api.restoreNote(note.id)
+                    reload()
+                }
+                reload()
+            } catch (e: Exception) {
+                say(e.message ?: "")
+            }
+        }
+    }
+
+    fun restore(note: NoteSummary) = act { Api.restoreNote(note.id) }
+    fun deleteForever(note: NoteSummary) = act { Api.deleteForever(note.id) }
+    fun emptyTrash() = act { Api.emptyTrash() }
+    fun togglePinned(note: NoteSummary) = act { Api.setPinned(note.id, !note.pinned) }
+    fun toggleDone(note: NoteSummary) = act { Api.setTodoCompleted(note.id, !note.todoCompleted) }
+    fun move(note: NoteSummary, folderId: String) = act { Api.moveNote(note.id, folderId) }
+    fun createFolder(title: String, parentId: String? = null) = act { Api.createFolder(title, parentId) }
+    fun renameFolder(id: String, title: String) = act { Api.renameFolder(id, title) }
+    fun setFolderIcon(id: String, emoji: String?) = act { Api.setFolderIcon(id, emoji) }
+    fun setFolderColor(id: String, color: String?) = act { Api.setFolderColor(id, color) }
+    fun trashFolder(id: String) = act {
+        Api.trashFolder(id)
+        if ((_home.value.scope as? Scope.InFolder)?.id == id) _home.update { it.copy(scope = Scope.All) }
+    }
+
+    private fun act(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+                unsent = true
+                reload()
+            } catch (e: Exception) {
+                say(e.message ?: "")
+            }
+        }
+    }
+
+    /** The editor closed: what it wrote is sent by the next sync. */
+    fun editorClosed() {
+        unsent = true
+        reload()
+    }
+
+    // ---------------------------------------------------------------------
+    // Sync
+
+    fun syncNow() {
+        viewModelScope.launch {
+            try {
+                onStatus(Api.syncNow())
+            } catch (e: Exception) {
+                say(e.message ?: "")
+            }
+        }
+    }
+
+    suspend fun refreshSyncSettings() {
+        runCatching { Api.syncSettings() }.getOrNull()?.let { _sync.value = it }
+    }
+
+    /** The app came to the front or left it. */
+    fun setForeground(visible: Boolean) {
+        Nisshoku.scope.launch { runCatching { Api.setForeground(visible) } }
+        if (!visible && unsent && _sync.value.target.kind != "none" && !_sync.value.status.needsPassword) {
+            SyncWorker.runOnce(getApplication())
+        }
+        if (visible) viewModelScope.launch { runCatching { loadPrefs() } }
+    }
+}

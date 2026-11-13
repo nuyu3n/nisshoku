@@ -1,0 +1,16 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The window before Compose draws: the app's paper colour, then the
+         activity's own (Compose paints everything, edge to edge). -->
+    <style name="Theme.Nisshoku" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/widget_bg</item>
+        <item name="android:colorAccent">@color/widget_accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Nisshoku.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/widget_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nisshoku</item>
+    </style>
+</resources>

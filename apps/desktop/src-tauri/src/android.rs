@@ -32,7 +32,7 @@ pub extern "system" fn Java_app_nisshoku_desktop_SyncWorker_nativeSync<'caller>(
         if let Err(e) = rustls_platform_verifier::android::init_with_env(env, context) {
             tracing::warn!("could not set up certificate checks: {e}");
         }
-        Ok(crate::sync::background_sync(std::path::Path::new(&dir)))
+        Ok(nisshoku_engine::sync::background_sync(std::path::Path::new(&dir)))
     });
     outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed icon (Android 13+): the moon faint, its sunlit rim full. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <path android:fillColor="#59FFFFFF" android:pathData="M222,512a290,290 0 1,0 580,0a290,290 0 1,0 -580,0z" />
+        <group>
+            <clip-path android:pathData="M222,512a290,290 0 1,0 580,0a290,290 0 1,0 -580,0z" />
+            <!-- Inside the moon, the moon minus the shadow: the rim. -->
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:fillType="evenOdd"
+                android:pathData="M222,512a290,290 0 1,0 580,0a290,290 0 1,0 -580,0zM228,770a542,542 0 1,0 1084,0a542,542 0 1,0 -1084,0z" />
+        </group>
+    </group>
+</vector>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The eclipsed moon of src-tauri/icons/source.svg, in its coordinates: the
+     1024 viewport maps onto the 108dp adaptive canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- At the proportions of source.svg (the moon about 60% of the visible icon). -->
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        <path android:pathData="M82,512a430,430 0 1,0 860,0a430,430 0 1,0 -860,0z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="radial"
+                    android:centerX="512"
+                    android:centerY="512"
+                    android:gradientRadius="430">
+                    <item android:offset="0" android:color="#61E2733A" />
+                    <item android:offset="0.66" android:color="#61E2733A" />
+                    <item android:offset="1" android:color="#00E2733A" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <group>
+            <clip-path android:pathData="M222,512a290,290 0 1,0 580,0a290,290 0 1,0 -580,0z" />
+            <!-- The sunlit rim, the penumbra, the umbra. -->
+            <path android:fillColor="#FFF8ECD6" android:pathData="M222,512a290,290 0 1,0 580,0a290,290 0 1,0 -580,0z" />
+            <path android:fillColor="#FFEEAC78" android:pathData="M228,770a542,542 0 1,0 1084,0a542,542 0 1,0 -1084,0z" />
+            <path android:pathData="M250,770a520,520 0 1,0 1040,0a520,520 0 1,0 -1040,0z">
+                <aapt:attr name="android:fillColor">
+                    <gradient
+                        android:type="radial"
+                        android:centerX="770"
+                        android:centerY="770"
+                        android:gradientRadius="520">
+                        <item android:offset="0" android:color="#FF5E1F10" />
+                        <item android:offset="0.42" android:color="#FF5E1F10" />
+                        <item android:offset="0.8" android:color="#FFAB3F1A" />
+                        <item android:offset="1" android:color="#FFE98443" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+    </group>
+</vector>

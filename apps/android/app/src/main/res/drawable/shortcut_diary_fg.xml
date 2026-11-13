@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground of the app shortcut icon (glyph of shortcut_diary.xml). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="32" android:translateY="32" android:scaleX="1.8333" android:scaleY="1.8333">
+        <path
+            android:pathData="M6,3.5h11a1.5,1.5 0,0 1,1.5 1.5v14a1.5,1.5 0,0 1,-1.5 1.5H6a1.5,1.5 0,0 1,-1.5 -1.5V5A1.5,1.5 0,0 1,6 3.5zM8.5,8h6M8.5,11.5h6"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeColor="@color/widget_accent_text" />
+    </group>
+</vector>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's palette (src/styles/tokens.css), for the home-screen widgets. -->
+<resources>
+    <color name="widget_bg">#FFFAF9F5</color>
+    <color name="widget_border">#FFE6E1D5</color>
+    <color name="widget_text">#FF2C2A26</color>
+    <color name="widget_text_2">#FF69645B</color>
+    <color name="widget_text_3">#FF9B958B</color>
+    <color name="widget_accent">#FFD9622B</color>
+    <color name="widget_accent_text">#FFB04C1B</color>
+    <color name="widget_accent_soft">#FFF7E4D7</color>
+    <color name="widget_danger">#FFC2412D</color>
+</resources>

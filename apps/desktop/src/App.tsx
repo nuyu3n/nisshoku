@@ -93,7 +93,7 @@ function useAppTitle() {
   }, [language]);
 }
 
-function useTheme() {
+export function useTheme() {
   useAppTitle();
   const theme = useStore((s) => s.prefs.theme);
   const accent = useStore((s) => s.prefs.accent);
@@ -194,7 +194,7 @@ function useShortcuts() {
   }, []);
 }
 
-function Toasts() {
+export function Toasts() {
   const toasts = useStore((s) => s.toasts);
   return (
     <div className="toasts">

@@ -1,0 +1,31 @@
+[package]
+name = "nisshoku-mobile"
+version.workspace = true
+edition.workspace = true
+description = "日色 — the engine for the native Android app (Kotlin bindings through UniFFI)"
+
+[lib]
+name = "nisshoku_mobile"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+# Writes the Kotlin bindings: cargo run -p nisshoku-mobile --features bindgen --bin uniffi-bindgen -- generate …
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+nisshoku-engine = { path = "../nisshoku-engine" }
+serde_json = "1.0.154"
+thiserror = "2"
+tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1.44"
+uniffi = "0.32.2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22.4"
+rustls-platform-verifier = "0.7.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "registry"] }

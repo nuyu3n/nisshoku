@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press shortcuts on the launcher icon. They open the same
+     `nisshoku://` links as the widgets (handled by src/lib/android.ts). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="diary"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_diary_icon"
+        android:shortcutShortLabel="@string/shortcut_diary"
+        android:shortcutLongLabel="@string/shortcut_diary_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nisshoku.desktop"
+            android:targetClass="app.nisshoku.desktop.MainActivity"
+            android:data="nisshoku://diary" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new-note"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_note_icon"
+        android:shortcutShortLabel="@string/shortcut_new_note"
+        android:shortcutLongLabel="@string/shortcut_new_note">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nisshoku.desktop"
+            android:targetClass="app.nisshoku.desktop.MainActivity"
+            android:data="nisshoku://new-note" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new-task"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_task_icon"
+        android:shortcutShortLabel="@string/shortcut_new_task"
+        android:shortcutLongLabel="@string/shortcut_new_task">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.nisshoku.desktop"
+            android:targetClass="app.nisshoku.desktop.MainActivity"
+            android:data="nisshoku://new-task" />
+    </shortcut>
+</shortcuts>

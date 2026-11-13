@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground of the app shortcut icon (glyph of shortcut_task.xml). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="32" android:translateY="32" android:scaleX="1.8333" android:scaleY="1.8333">
+        <path
+            android:pathData="M6,4h12a2,2 0,0 1,2 2v12a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V6a2,2 0,0 1,2 -2zM8,12.5l2.8,2.8L16,9.5"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeColor="@color/widget_accent_text" />
+    </group>
+</vector>
