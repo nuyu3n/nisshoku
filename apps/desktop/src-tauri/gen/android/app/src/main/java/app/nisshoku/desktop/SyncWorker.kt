@@ -1,6 +1,7 @@
 package app.nisshoku.desktop
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -16,6 +17,10 @@ import java.util.concurrent.TimeUnit
  * Syncs in the background every so often, with the app closed too
  * (WorkManager; settings → sync). The sync is the app's own, run without a
  * window by `nativeSync` (src/android.rs) on the profile the app gave.
+ *
+ * WorkManager is set up the first time it is asked for (`App.kt`), not when
+ * the process starts, and the app's calls into this class are guarded
+ * (MainActivity.kt): a failure here costs the background sync, not the app.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
   companion object {
@@ -59,9 +64,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
   override fun doWork(): Result {
     val dir = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("dir", null)
       ?: return Result.success()
-    return when (nativeSync(applicationContext, dir)) {
-      1 -> Result.retry()
-      else -> Result.success()
+    return try {
+      when (nativeSync(applicationContext, dir)) {
+        1 -> Result.retry()
+        else -> Result.success()
+      }
+    } catch (e: Throwable) {
+      Log.w("SyncWorker", "background sync failed: $e")
+      Result.failure()
     }
   }
 }

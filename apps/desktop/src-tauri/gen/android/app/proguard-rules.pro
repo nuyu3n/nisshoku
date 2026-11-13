@@ -19,3 +19,14 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# WorkManager (the background sync, SyncWorker.kt) and the Room database it
+# keeps its work in make these by reflection, with these constructors. R8 in
+# AGP 9 no longer keeps a constructor because the class is kept (strict full
+# mode), and without them WorkManager fails to start in release builds.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class * extends androidx.startup.Initializer { <init>(); }
+-keep class * extends androidx.work.InputMerger { <init>(); }
+-keep class * extends androidx.work.ListenableWorker {
+    <init>(android.content.Context, androidx.work.WorkerParameters);
+}

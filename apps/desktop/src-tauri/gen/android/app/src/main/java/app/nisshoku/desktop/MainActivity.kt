@@ -8,6 +8,7 @@ import android.os.LocaleList
 import android.net.Uri
 import android.os.Bundle
 import android.os.FileObserver
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -132,12 +133,20 @@ class MainActivity : TauriActivity() {
 
       /** One sync in the background as soon as possible (the app left with changes not sent). */
       @JavascriptInterface fun syncInBackground() {
-        SyncWorker.runOnce(applicationContext)
+        try {
+          SyncWorker.runOnce(applicationContext)
+        } catch (e: Throwable) {
+          Log.w("MainActivity", "no background sync: $e")
+        }
       }
 
       /** Syncs in the background every `minutes` (0: never), the app closed too (SyncWorker.kt). */
       @JavascriptInterface fun setBackgroundSync(minutes: Int, dir: String) {
-        SyncWorker.schedule(applicationContext, minutes, dir)
+        try {
+          SyncWorker.schedule(applicationContext, minutes, dir)
+        } catch (e: Throwable) {
+          Log.w("MainActivity", "no background sync: $e")
+        }
       }
 
       /** Light or dark icons on the system bars, for the app's own theme (which may differ from the system's). */

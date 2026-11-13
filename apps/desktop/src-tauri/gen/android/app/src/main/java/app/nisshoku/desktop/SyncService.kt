@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -33,13 +34,17 @@ class SyncService : Service() {
     /** Gives up on a progress file that stops changing (the sync died). */
     private const val STALE_MS = 120_000L
 
-    /** Starts the service for a sync of the profile in `dir` (the app is in front). */
+    /**
+     * Starts the service for a sync of the profile in `dir` (the app is in front).
+     *
+     * With `startService`, not `startForegroundService`: that one makes
+     * Android kill the app when the service then fails to go to the
+     * foreground, and the app in front may start a service as it is.
+     */
     fun start(context: Context, dir: String) {
-      val intent = Intent(context, SyncService::class.java).putExtra("dir", dir)
       try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-        else context.startService(intent)
-      } catch (e: Exception) {
+        context.startService(Intent(context, SyncService::class.java).putExtra("dir", dir))
+      } catch (e: Throwable) {
         // Not allowed now (for example already in the background): the sync
         // runs without the notification.
         Log.w("SyncService", "could not start: $e")
@@ -59,18 +64,21 @@ class SyncService : Service() {
       stopSelf()
       return START_NOT_STICKY
     }
-    file = File(dir, "sync-progress.json")
-    startedAt = System.currentTimeMillis()
-    createChannel()
-    val first = build(getString(R.string.sync_running), 0, 0)
+    // The notification is an extra: whatever goes wrong with it, the sync
+    // (the app's own) goes on and the app stays up.
     try {
+      file = File(dir, "sync-progress.json")
+      startedAt = System.currentTimeMillis()
+      createChannel()
+      val first = build(getString(R.string.sync_running), 0, 0)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         startForeground(NOTIFICATION, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
       } else {
         startForeground(NOTIFICATION, first)
       }
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
       Log.w("SyncService", "could not go to the foreground: $e")
+      handler.removeCallbacksAndMessages(null)
       stopSelf()
       return START_NOT_STICKY
     }
@@ -80,6 +88,15 @@ class SyncService : Service() {
   }
 
   private fun poll() {
+    try {
+      step()
+    } catch (e: Throwable) {
+      Log.w("SyncService", "could not show the progress: $e")
+      finish()
+    }
+  }
+
+  private fun step() {
     val now = System.currentTimeMillis()
     val json = try {
       file?.takeIf { it.exists() }?.readText()?.let { JSONObject(it) }
@@ -105,8 +122,12 @@ class SyncService : Service() {
 
   private fun finish() {
     handler.removeCallbacksAndMessages(null)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-    else @Suppress("DEPRECATION") stopForeground(true)
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+      else @Suppress("DEPRECATION") stopForeground(true)
+    } catch (e: Throwable) {
+      Log.w("SyncService", "could not leave the foreground: $e")
+    }
     stopSelf()
   }
 
@@ -144,9 +165,15 @@ class SyncService : Service() {
       .setProgress(total, done.coerceAtMost(total), total <= 0)
     if (Build.VERSION.SDK_INT >= 36) {
       // Android 16: shown as a Live Update (in the status bar chip and on
-      // the lock screen) when the user allows it.
-      builder.setRequestPromotedOngoing(true)
-      builder.setShortCriticalText(if (total > 0) "$done/$total" else getString(R.string.sync_short))
+      // the lock screen) when the user allows it. Asked for with the extra:
+      // `Builder.setRequestPromotedOngoing` only came with Android 16 QPR1
+      // (API 36.1), and calling it on 16.0 throws NoSuchMethodError.
+      try {
+        builder.addExtras(Bundle().apply { putBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING, true) })
+        builder.setShortCriticalText(if (total > 0) "$done/$total" else getString(R.string.sync_short))
+      } catch (e: Throwable) {
+        Log.w("SyncService", "no live update: $e")
+      }
     }
     return builder.build()
   }
