@@ -11,6 +11,7 @@ import { WindowControls } from "./Chrome";
 import { contextMenu } from "./ContextMenu";
 import { newNotebook } from "../lib/actions";
 import { useInk } from "../lib/motion";
+import { isMobile } from "../lib/mobile";
 
 function sameScope(a: Scope, b: Scope) {
   return a.kind === b.kind && (a.kind !== "folder" || (b.kind === "folder" && a.id === b.id));
@@ -343,9 +344,12 @@ export function Sidebar() {
         <TodayCard />
         <div className="sync-row">
           <SyncButton />
-          <button className="icon-btn" title={`${t("nav.settings")} (Ctrl+,)`} onClick={() => useStore.getState().set({ settingsTab: "general" })}>
-            <Icon name="settings" />
-          </button>
+          {/* Phones open the settings from the tab bar (MobileUI.tsx). */}
+          {!(isMobile && layout === "narrow") && (
+            <button className="icon-btn" title={`${t("nav.settings")} (Ctrl+,)`} onClick={() => useStore.getState().set({ settingsTab: "general" })}>
+              <Icon name="settings" />
+            </button>
+          )}
         </div>
       </div>
     </nav>
