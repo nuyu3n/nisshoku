@@ -44,7 +44,7 @@ import app.nisshoku.android.engine.Scope
 import app.nisshoku.android.ui.AppModel
 import app.nisshoku.android.ui.UpdateDialog
 import app.nisshoku.android.ui.WhatsNewDialog
-import app.nisshoku.android.ui.EditorScreen
+import app.nisshoku.android.ui.NoteScreen
 import app.nisshoku.android.ui.HomeScreen
 import app.nisshoku.android.ui.SearchScreen
 import app.nisshoku.android.ui.SettingsScreen
@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
                 enterTransition = { scaleIn(tween(320), initialScale = 0.94f) + fadeIn(tween(240)) },
             ) { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
-                EditorScreen(noteId = id, dark = dark, onClose = {
+                NoteScreen(noteId = id, dark = dark, model = model, onClose = {
                     model.editorClosed()
                     if (nav.currentBackStackEntry?.destination?.route == "note/{id}") nav.popBackStack()
                 })

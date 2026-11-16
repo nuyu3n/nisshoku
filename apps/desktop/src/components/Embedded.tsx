@@ -26,6 +26,8 @@ declare global {
       close: () => void;
       /** The note open now (a link may lead to another). */
       opened: (id: string) => void;
+      /** Opens the note in the app's own text editor instead. */
+      plain?: () => void;
     };
     /** For the app: saves what is typed but not saved yet. */
     __nisshokuFlush?: () => Promise<void>;

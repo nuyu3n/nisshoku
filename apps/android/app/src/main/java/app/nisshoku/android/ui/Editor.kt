@@ -67,7 +67,9 @@ private const val ORIGIN = "https://appassets.androidplatform.net"
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun EditorScreen(noteId: String, dark: Boolean, onClose: () -> Unit) {
+fun EditorScreen(noteId: String, dark: Boolean, onClose: () -> Unit, onPlain: () -> Unit = {}, onOpened: (String) -> Unit = {}) {
+    val plain by rememberUpdatedState(onPlain)
+    val opened by rememberUpdatedState(onOpened)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val close by rememberUpdatedState(onClose)
@@ -93,6 +95,8 @@ fun EditorScreen(noteId: String, dark: Boolean, onClose: () -> Unit) {
             scope = scope,
             view = { webView },
             onClose = { close() },
+            onPlain = { plain() },
+            onOpened = { opened(it) },
             onPick = { id, mimes ->
                 pending.value = id to false
                 open.launch(mimes.ifEmpty { arrayOf("*/*") })
@@ -278,6 +282,8 @@ private class Bridge(
     private val scope: CoroutineScope,
     private val view: () -> WebView?,
     private val onClose: () -> Unit,
+    private val onPlain: () -> Unit,
+    private val onOpened: (String) -> Unit,
     private val onPick: (Int, Array<String>) -> Unit,
     private val onSave: (Int, String) -> Unit,
 ) {
@@ -351,7 +357,15 @@ private class Bridge(
         }
 
         @JavascriptInterface
-        fun opened(id: String) {}
+        fun opened(id: String) {
+            view()?.post { onOpened(id) }
+        }
+
+        /** The note in the app's own text editor instead (NativeEditor.kt). */
+        @JavascriptInterface
+        fun plain() {
+            view()?.post { onPlain() }
+        }
     }
 
     /** `window.NisshokuInsets` of lib/mobile.ts. */

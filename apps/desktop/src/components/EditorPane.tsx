@@ -648,7 +648,15 @@ export function EditorPane() {
       checked: panel === id,
       run: () => s.set({ panel: panel === id ? "none" : id }),
     });
+    // In the native Android app: its own text editor (the keyboard's input goes straight to it).
+    const native = window.NisshokuNative;
     return [
+      ...(native?.plain
+        ? ([{ label: t("menu.plainEditor"), icon: "type", run: async () => {
+            await flush();
+            native.plain?.();
+          } }, "sep"] as MenuItem[])
+        : []),
       ...(narrow
         ? ([
             panelItem("outline", "outline", t("editor.outline")),
