@@ -75,9 +75,8 @@ android {
             kotlin.srcDir(file("build/generated/uniffi"))
         }
     }
-    packaging {
-        jniLibs.keepDebugSymbols += "**/*.so"
-    }
+    // (Release builds strip the engine's symbols: a third of the size.)
+    if (!isRelease) packaging { jniLibs.keepDebugSymbols += "**/*.so" }
 }
 
 // -------------------------------------------------------------------------
@@ -139,7 +138,14 @@ val webAssets = tasks.register<Sync>("webAssets") {
     into(file("src/main/assets/web"))
 }
 
-tasks.named("preBuild") { dependsOn(uniffiBindings, webAssets) }
+// The release notes, for "what's new" (ui/Releases.kt).
+val changelog = tasks.register<Copy>("changelog") {
+    group = "nisshoku"
+    from(webDir.resolve("CHANGELOG.md"))
+    into(file("src/main/assets"))
+}
+
+tasks.named("preBuild") { dependsOn(uniffiBindings, webAssets, changelog) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")

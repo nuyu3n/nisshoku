@@ -60,6 +60,15 @@ object Nisshoku {
     private val _events = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<EngineEvent> = _events.asSharedFlow()
 
+    private val _widgetActions = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+
+    /** A widget did something (ticked a task off): the open app applies it at once. */
+    val widgetActions: SharedFlow<Unit> = _widgetActions.asSharedFlow()
+
+    fun widgetAction() {
+        _widgetActions.tryEmit(Unit)
+    }
+
     /** Background work of the app's own (not tied to a screen). */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

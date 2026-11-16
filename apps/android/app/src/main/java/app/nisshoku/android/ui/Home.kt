@@ -56,6 +56,10 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -138,8 +142,12 @@ fun scopeTitle(scope: Scope, folders: List<Folder>): String = when (scope) {
     Scope.Trash -> tr("ゴミ箱", "Trash")
     Scope.Conflicts -> tr("競合", "Conflicts")
     is Scope.InFolder -> folders.find { it.id == scope.id }?.title ?: tr("ノートブック", "Notebook")
+    is Scope.WithTag -> "#" + (LocalTags.current.find { it.id == scope.id }?.title ?: "")
     is Scope.Search -> scope.query
 }
+
+/** The tags, for the title of a tag's list. */
+private val LocalTags = androidx.compose.runtime.compositionLocalOf<List<app.nisshoku.android.engine.Tag>> { emptyList() }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -159,11 +167,23 @@ fun HomeScreen(
     var actionsFor by remember { mutableStateOf<NoteSummary?>(null) }
     var movingNote by remember { mutableStateOf<NoteSummary?>(null) }
     var newTask by remember { mutableStateOf(false) }
+    var dueFor by remember { mutableStateOf<NoteSummary?>(null) }
     var folderEdit by remember { mutableStateOf<FolderEdit?>(null) }
+
+    // "New task" asked for from outside (a widget, a launcher shortcut).
+    val newTaskRequests by model.newTaskRequests.collectAsState()
+    var seenRequests by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(newTaskRequests) {
+        if (newTaskRequests > seenRequests) {
+            seenRequests = newTaskRequests
+            newTask = true
+        }
+    }
 
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(fabOpen) { fabOpen = false }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalTags provides state.tags) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
@@ -193,7 +213,8 @@ fun HomeScreen(
                     },
                     subtitle = {
                         val count = state.notes.size
-                        Text(if (state.loading) " " else tr("$count 件", if (count == 1) "1 note" else "$count notes"))
+                        val unit = if (state.scope == Scope.Todo) (if (count == 1) "task" else "tasks") else (if (count == 1) "note" else "notes")
+                        Text(if (state.loading) " " else tr("$count 件", "$count $unit"))
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawer.open() } }) {
@@ -250,9 +271,17 @@ fun HomeScreen(
                     onPin = model::togglePinned,
                     onDone = model::toggleDone,
                     onEmptyTrash = model::emptyTrash,
+                    header = if (state.scope == Scope.Diary) ({
+                        DiaryCalendar(
+                            version = state.version,
+                            weekStartsMonday = model.prefString("weekStart", "sun") == "mon",
+                            onOpen = { date -> scope.launch { model.diaryOf(date)?.let(onOpen) } },
+                        )
+                    }) else null,
                 )
             }
         }
+    }
     }
 
     actionsFor?.let { note ->
@@ -265,6 +294,19 @@ fun HomeScreen(
             onTrash = { model.trash(note) },
             onRestore = { model.restore(note) },
             onDelete = { model.deleteForever(note) },
+            onDue = { dueFor = note },
+            onClearDue = { model.setDue(note, 0, false) },
+            onToggleTodo = { model.toggleTodo(note) },
+        )
+    }
+    dueFor?.let { note ->
+        DuePicker(
+            initial = note.todoDue,
+            onDismiss = { dueFor = null },
+            onPick = { date ->
+                model.setDue(note, allDayDue(date), true)
+                dueFor = null
+            },
         )
     }
     movingNote?.let { note ->
@@ -278,14 +320,13 @@ fun HomeScreen(
         )
     }
     if (newTask) {
-        TextPrompt(
-            title = tr("新しいタスク", "New task"),
-            label = tr("やること", "To do"),
-            confirm = tr("追加", "Add"),
+        NewTaskSheet(
             onDismiss = { newTask = false },
-            onDone = { title ->
-                scope.launch { if (model.newTask(title)) snackbar.showSnackbar(trNow("タスクを追加しました", "Task added")) }
+            onAdd = { title, due ->
                 newTask = false
+                scope.launch {
+                    if (model.newTask(title, due, due != null)) model.say(trNow("タスクを追加しました", "Task added"))
+                }
             },
         )
     }
@@ -364,9 +405,10 @@ private fun NoteList(
     onPin: (NoteSummary) -> Unit,
     onDone: (NoteSummary) -> Unit,
     onEmptyTrash: () -> Unit,
+    header: (@Composable () -> Unit)?,
 ) {
     val list = rememberLazyListState()
-    if (state.notes.isEmpty()) {
+    if (state.notes.isEmpty() && header == null) {
         AnimatedVisibility(!state.loading, enter = fadeIn(), exit = fadeOut()) {
             // Scrollable, so that pulling still syncs.
             Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -388,6 +430,11 @@ private fun NoteList(
         verticalArrangement = Arrangement.spacedBy(3.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (header != null) {
+            item(key = "header") {
+                Column(Modifier.padding(bottom = 12.dp)) { header() }
+            }
+        }
         if (state.scope == Scope.Trash) {
             item(key = "empty-trash") {
                 Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.End) {
@@ -517,6 +564,20 @@ private fun Drawer(
                     colors = NavigationDrawerItemDefaults.colors(),
                 )
             }
+            if (state.tags.isNotEmpty()) {
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                Text(tr("タグ", "Tags"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp))
+                for (tag in state.tags) {
+                    NavigationDrawerItem(
+                        label = { Text(tag.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        icon = { Icon(Icons.Outlined.Tag, null) },
+                        badge = { Text("${tag.noteCount}", style = MaterialTheme.typography.labelMedium) },
+                        selected = (state.scope as? Scope.WithTag)?.id == tag.id,
+                        onClick = { onScope(Scope.WithTag(tag.id)) },
+                        modifier = Modifier.height(52.dp),
+                    )
+                }
+            }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             DrawerItem(tr("競合", "Conflicts"), Icons.Outlined.WarningAmber, item(Scope.Conflicts)) { onScope(Scope.Conflicts) }
             DrawerItem(tr("ゴミ箱", "Trash"), Icons.Outlined.Delete, item(Scope.Trash)) { onScope(Scope.Trash) }
@@ -564,6 +625,9 @@ private fun NoteActions(
     onTrash: () -> Unit,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
+    onDue: () -> Unit,
+    onClearDue: () -> Unit,
+    onToggleTodo: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -585,8 +649,15 @@ private fun NoteActions(
             val actions = if (inTrash) listOf(
                 Triple(tr("元に戻す", "Restore"), Icons.Outlined.Restore, onRestore),
                 Triple(tr("完全に削除", "Delete forever"), Icons.Outlined.DeleteForever, onDelete),
-            ) else listOf(
+            ) else listOfNotNull(
                 Triple(if (note.pinned) tr("ピン留めを外す", "Unpin") else tr("ピン留め", "Pin"), Icons.Outlined.PushPin, onPin),
+                Triple(if (note.todoDue > 0) tr("期限を変更", "Change the due date") else tr("期限を設定", "Set a due date"), Icons.Outlined.Event, onDue),
+                if (note.todoDue > 0) Triple(tr("期限を消す", "Remove the due date"), Icons.Outlined.EventBusy, onClearDue) else null,
+                Triple(
+                    if (note.isTodo) tr("タスクをやめてノートにする", "Make it a plain note") else tr("タスクにする", "Make it a task"),
+                    if (note.isTodo) Icons.AutoMirrored.Outlined.Notes else Icons.Outlined.RadioButtonUnchecked,
+                    onToggleTodo,
+                ),
                 Triple(tr("ノートブックへ移動", "Move to notebook"), Icons.Outlined.DriveFileMove, onMove),
                 Triple(tr("ゴミ箱へ移動", "Move to trash"), Icons.Outlined.Delete, onTrash),
             )

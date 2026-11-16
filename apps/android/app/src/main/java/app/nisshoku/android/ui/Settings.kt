@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonGroupDefaults
@@ -380,25 +381,42 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
                     subtitle = tr("バージョン ", "Version ") + BuildConfig.VERSION_NAME,
                     icon = Icons.Outlined.Info,
                     index = 0,
-                    count = 2,
+                    count = 4,
+                )
+            }
+            item {
+                var checking by remember { mutableStateOf(false) }
+                SettingRow(
+                    title = tr("アップデートを確認", "Check for updates"),
+                    icon = Icons.Outlined.SystemUpdate,
+                    index = 1,
+                    count = 4,
+                    onClick = {
+                        if (!checking) scope.launch {
+                            checking = true
+                            model.checkForUpdate(quiet = false)
+                            checking = false
+                        }
+                    },
+                    trailing = if (checking) ({ LoadingIndicator(Modifier.size(32.dp)) }) else null,
                 )
             }
             item {
                 SettingRow(
-                    title = tr("リリースノート", "Release notes"),
-                    subtitle = release?.let { tr("最新: ", "Latest: ") + it.version },
+                    title = tr("起動時にアップデートを確認", "Check for updates at start"),
+                    index = 2,
+                    count = 4,
+                    onClick = { model.setPref("autoUpdateCheck", JsonPrimitive(!bool("autoUpdateCheck", true))) },
+                    trailing = { Switch(checked = bool("autoUpdateCheck", true), onCheckedChange = { model.setPref("autoUpdateCheck", JsonPrimitive(it)) }) },
+                )
+            }
+            item {
+                SettingRow(
+                    title = tr("新しくなったこと", "What's new"),
                     icon = Icons.Outlined.NewReleases,
-                    index = 1,
-                    count = 2,
-                    onClick = {
-                        scope.launch {
-                            val r = runCatching { Api.latestRelease() }.getOrNull()
-                            release = r
-                            val url = r?.url ?: "https://github.com/nuyu3n/nisshoku/releases"
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        }
-                    },
-                    trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
+                    index = 3,
+                    count = 4,
+                    onClick = model::showAllReleases,
                 )
             }
         }

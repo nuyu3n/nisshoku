@@ -40,7 +40,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import app.nisshoku.android.engine.Scope
 import app.nisshoku.android.ui.AppModel
+import app.nisshoku.android.ui.UpdateDialog
+import app.nisshoku.android.ui.WhatsNewDialog
 import app.nisshoku.android.ui.EditorScreen
 import app.nisshoku.android.ui.HomeScreen
 import app.nisshoku.android.ui.SearchScreen
@@ -135,6 +138,11 @@ class MainActivity : ComponentActivity() {
             follow(uri, nav)
         }
 
+        val whatsNew by model.whatsNew.collectAsState()
+        whatsNew?.let { WhatsNewDialog(it, onDismiss = model::closeWhatsNew) }
+        val update by model.update.collectAsState()
+        update?.let { UpdateDialog(it, onDismiss = model::dismissUpdate) }
+
         val open: (String) -> Unit = { id -> nav.navigate("note/$id") { launchSingleTop = true } }
         NavHost(
             navController = nav,
@@ -179,8 +187,10 @@ class MainActivity : ComponentActivity() {
         val id = when (uri.host) {
             "diary" -> model.todaysDiary()
             "new-note" -> model.newNote()
-            "new-task" -> {
-                nav.navigate("home") { launchSingleTop = true }
+            "tasks", "new-task" -> {
+                nav.popBackStack("home", inclusive = false)
+                model.setScope(Scope.Todo)
+                if (uri.host == "new-task") model.requestNewTask()
                 null
             }
             "note" -> uri.lastPathSegment

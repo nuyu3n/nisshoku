@@ -45,6 +45,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.nisshoku.android.engine.NoteSummary
 import app.nisshoku.android.tr
+import app.nisshoku.android.trNow
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import app.nisshoku.android.ui.theme.noteTitle
 
 /**
@@ -61,11 +66,22 @@ fun groupShape(index: Int, count: Int, outer: Int = 24, inner: Int = 6): Shape {
 fun relativeTime(ms: Long): String =
     if (ms <= 0) "" else DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
 
+/** When a task is due: "Today", "Tomorrow 14:30", else the date. */
 fun dueText(ms: Long, allDay: Boolean): String {
     if (ms <= 0) return ""
-    val flags = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or (if (allDay) 0 else DateUtils.FORMAT_SHOW_TIME)
-    return DateUtils.formatDateTime(null, ms, flags)
+    val date = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
+    val day = when (ChronoUnit.DAYS.between(LocalDate.now(), date.toLocalDate())) {
+        0L -> trNow("今日", "Today")
+        1L -> trNow("明日", "Tomorrow")
+        -1L -> trNow("昨日", "Yesterday")
+        else -> DateUtils.formatDateTime(null, ms, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH)
+    }
+    return if (allDay) day else "$day ${"%02d:%02d".format(date.hour, date.minute)}"
 }
+
+/** Whether a task is past its due time (one due on a day: once the day is over). */
+fun overdue(ms: Long, allDay: Boolean): Boolean = ms > 0 &&
+    if (allDay) Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate() < LocalDate.now() else ms < System.currentTimeMillis()
 
 /** A note in a list: its title in the paper's serif, a line of its text, when it changed. */
 @Composable
@@ -142,7 +158,7 @@ fun NoteCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val due = if (note.isTodo && note.todoDue > 0) dueText(note.todoDue, note.dueAllDay) else ""
                     if (due.isNotEmpty()) {
-                        val late = !note.todoCompleted && note.todoDue < System.currentTimeMillis()
+                        val late = !note.todoCompleted && overdue(note.todoDue, note.dueAllDay)
                         Text(
                             due,
                             style = MaterialTheme.typography.labelMedium,

@@ -45,11 +45,21 @@ data class NoteSummary(
 )
 
 @Serializable
+data class Tag(val id: String, val title: String = "", val noteCount: Int = 0)
+
+/** A day of the diary that has an entry. */
+@Serializable
+data class DiaryDay(val date: String, val noteId: String = "", val charCount: Int = 0, val mood: String? = null)
+
+@Serializable
 data class Note(
     val id: String,
     val parentId: String = "",
     val title: String = "",
     val body: String = "",
+    val updatedTime: Long = 0,
+    val deletedTime: Long = 0,
+    val isTodo: Boolean = false,
 )
 
 @Serializable
@@ -143,6 +153,10 @@ sealed interface Scope {
         override val json = buildJsonObject { put("kind", "folder"); put("id", id) }
     }
 
+    data class WithTag(val id: String) : Scope {
+        override val json = buildJsonObject { put("kind", "tag"); put("id", id) }
+    }
+
     data class Search(val query: String) : Scope {
         override val json = buildJsonObject { put("kind", "search"); put("query", query) }
     }
@@ -176,8 +190,20 @@ object Api {
     suspend fun createNote(parentId: String?, title: String? = null, body: String? = null): Note =
         get("create_note", "parentId" to parentId, "title" to title, "body" to body)
 
-    suspend fun createTask(title: String, parentId: String?): NoteSummary =
-        get("create_task", "title" to title, "parentId" to parentId, "due" to null, "allDay" to null)
+    suspend fun createTask(title: String, parentId: String?, due: Long?, allDay: Boolean): NoteSummary =
+        get("create_task", "title" to title, "parentId" to parentId, "due" to due, "allDay" to allDay)
+
+    suspend fun setTodoDue(id: String, due: Long, allDay: Boolean) =
+        Nisshoku.call("set_todo_due", args("id" to id, "due" to due, "allDay" to allDay))
+
+    suspend fun setNoteTodo(id: String, todo: Boolean) = Nisshoku.call("set_note_todo", args("id" to id, "todo" to todo))
+    suspend fun saveNote(id: String, title: String, body: String, baseTitle: String?, baseBody: String?): NoteSummary =
+        get("save_note", "id" to id, "title" to title, "body" to body, "baseTitle" to baseTitle, "baseBody" to baseBody)
+
+    suspend fun tags(): List<Tag> = get("list_tags")
+    suspend fun diaryMonth(month: String): List<DiaryDay> = get("diary_month", "month" to month)
+    suspend fun refreshWidgets() = Nisshoku.call("refresh_widgets")
+    suspend fun applyWidgetActions(): Int = get("apply_widget_actions")
 
     suspend fun openDiary(date: String): Note = get("open_diary", "date" to date)
     suspend fun trashNote(id: String) = Nisshoku.call("trash_note", args("id" to id))

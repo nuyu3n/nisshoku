@@ -5,7 +5,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.nisshoku.android.Lang
 import app.nisshoku.android.engine.Api
+import app.nisshoku.android.BuildConfig
+import app.nisshoku.android.Shortcuts
 import app.nisshoku.android.engine.Folder
+import app.nisshoku.android.engine.Release
+import app.nisshoku.android.engine.Tag
+import app.nisshoku.desktop.Widgets
+import kotlinx.coroutines.delay
 import app.nisshoku.android.engine.Nisshoku
 import app.nisshoku.android.engine.NoteSummary
 import app.nisshoku.android.engine.Scope
@@ -38,6 +44,9 @@ data class Message(val text: String, val action: String? = null, val run: (suspe
 data class HomeState(
     val ready: Boolean = false,
     val folders: List<Folder> = emptyList(),
+    val tags: List<Tag> = emptyList(),
+    /** Counts up with every reload (what shows other data reloads with it). */
+    val version: Int = 0,
     val scope: Scope = Scope.All,
     val notes: List<NoteSummary> = emptyList(),
     val loading: Boolean = true,
@@ -61,6 +70,25 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val messages = _messages.receiveAsFlow()
 
     private var loadJob: Job? = null
+    private var widgetJob: Job? = null
+
+    /** Asks the home screen for its "new task" sheet (a count, so that each ask is seen). */
+    private val _newTaskRequests = MutableStateFlow(0)
+    val newTaskRequests: StateFlow<Int> = _newTaskRequests.asStateFlow()
+
+    fun requestNewTask() {
+        _newTaskRequests.update { it + 1 }
+    }
+
+    /** What changed in the versions since the one last opened, to show once. */
+    private val _whatsNew = MutableStateFlow<List<ReleaseNotes>?>(null)
+    val whatsNew: StateFlow<List<ReleaseNotes>?> = _whatsNew.asStateFlow()
+
+    /** A newer release with a package to install. */
+    private val _update = MutableStateFlow<Release?>(null)
+    val update: StateFlow<Release?> = _update.asStateFlow()
+
+    val version: String = BuildConfig.VERSION_NAME.removeSuffix("-dev")
 
     /** Notes were written since the last sync (sent in the background on leaving). */
     private var unsent = false
@@ -79,14 +107,19 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        viewModelScope.launch { Nisshoku.widgetActions.collect { applyWidgetActions() } }
     }
 
     private suspend fun start() {
         try {
             loadPrefs()
             _sync.value = Api.syncSettings()
+            runCatching { Api.applyWidgetActions() }
             reload()
             _home.update { it.copy(ready = true) }
+            Shortcuts.update(getApplication())
+            showWhatsNew()
+            if (prefBool("autoUpdateCheck", true)) viewModelScope.launch { checkForUpdate(quiet = true) }
             if (_sync.value.target.kind != "none") {
                 SyncWorker.schedule(getApplication(), pref("backgroundSyncMinutes")?.jsonPrimitive?.intOrNull ?: 60)
             }
@@ -106,6 +139,62 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun say(text: String, action: String? = null, run: (suspend () -> Unit)? = null) {
         _messages.trySend(Message(text, action, run))
+    }
+
+    // ---------------------------------------------------------------------
+    // Versions
+
+    private fun showWhatsNew() {
+        val seen = prefString("lastSeenVersion", "")
+        if (seen == version) return
+        setPref("lastSeenVersion", JsonPrimitive(version))
+        val all = ReleaseNotes.bundled(getApplication())
+        // A new install shows nothing; an update, what came since.
+        val shown = if (seen.isEmpty()) emptyList() else all.filter { isNewer(it.version, seen) && !isNewer(it.version, version) }
+        if (shown.any { it.items.isNotEmpty() }) _whatsNew.value = shown
+    }
+
+    fun showAllReleases() {
+        _whatsNew.value = ReleaseNotes.bundled(getApplication())
+    }
+
+    fun closeWhatsNew() {
+        _whatsNew.value = null
+    }
+
+    /** Looks for a newer release; `quiet` says nothing when there is none (or no network). */
+    suspend fun checkForUpdate(quiet: Boolean) {
+        val release = runCatching { Api.latestRelease() }.getOrElse {
+            if (!quiet) say(it.message ?: "")
+            return
+        }
+        if (isNewer(release.version, version) && release.apkUrl != null) _update.value = release
+        else if (!quiet) say(trNow("最新のバージョンです", "You have the latest version"))
+    }
+
+    fun dismissUpdate() {
+        _update.value = null
+    }
+
+    // ---------------------------------------------------------------------
+    // Widgets
+
+    /** Rewrites what the home-screen widgets show, a moment after the last change. */
+    private fun refreshWidgets() {
+        widgetJob?.cancel()
+        widgetJob = Nisshoku.scope.launch {
+            delay(800)
+            runCatching { Api.refreshWidgets() }
+            runCatching { Widgets.refreshAll(getApplication()) }
+        }
+    }
+
+    private suspend fun applyWidgetActions() {
+        val changed = runCatching { Api.applyWidgetActions() }.getOrDefault(0)
+        if (changed > 0) {
+            unsent = true
+            reload()
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -129,11 +218,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun setPref(key: String, value: JsonElement) {
         val next = JsonObject(_prefs.value + (key to value))
         _prefs.value = next
-        if (key == "language") Lang.english = (value as? JsonPrimitive)?.content == "en"
+        if (key == "language") {
+            Lang.english = (value as? JsonPrimitive)?.content == "en"
+            Shortcuts.update(getApplication())
+        }
         viewModelScope.launch {
             try {
                 Api.setPreferences(next)
                 if (key == "backgroundSyncMinutes") SyncWorker.schedule(getApplication(), prefInt(key, 60))
+                if (key in setOf("language", "theme", "accent", "dailyGoal")) refreshWidgets()
             } catch (e: Exception) {
                 say(e.message ?: "")
             }
@@ -161,8 +254,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             try {
                 val scope = _home.value.scope
                 val folders = Api.folders()
+                val tags = Api.tags()
                 val notes = Api.notes(scope)
-                if (scope == _home.value.scope) _home.update { it.copy(folders = folders, notes = notes, loading = false) }
+                if (scope == _home.value.scope) {
+                    _home.update { it.copy(folders = folders, tags = tags, notes = notes, loading = false, version = it.version + 1) }
+                }
+                refreshWidgets()
             } catch (e: Exception) {
                 _home.update { it.copy(loading = false) }
                 say(e.message ?: "")
@@ -178,8 +275,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         say(e.message ?: ""); null
     }
 
-    suspend fun newTask(title: String): Boolean = try {
-        Api.createTask(title, (_home.value.scope as? Scope.InFolder)?.id)
+    suspend fun newTask(title: String, due: Long?, allDay: Boolean): Boolean = try {
+        Api.createTask(title, (_home.value.scope as? Scope.InFolder)?.id, due, allDay)
         unsent = true
         reload()
         true
@@ -188,11 +285,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Today's diary entry (made if needed); its id. */
-    suspend fun todaysDiary(): String? = try {
-        Api.openDiary(LocalDate.now().toString()).id.also { reload() }
+    suspend fun todaysDiary(): String? = diaryOf(LocalDate.now().toString())
+
+    /** The diary entry of a day (`YYYY-MM-DD`, made if needed); its id. */
+    suspend fun diaryOf(date: String): String? = try {
+        Api.openDiary(date).id.also { reload() }
     } catch (e: Exception) {
         say(e.message ?: ""); null
     }
+
+    fun setDue(note: NoteSummary, due: Long, allDay: Boolean) = act { Api.setTodoDue(note.id, due, allDay) }
+    fun toggleTodo(note: NoteSummary) = act { Api.setNoteTodo(note.id, !note.isTodo) }
 
     fun trash(note: NoteSummary) {
         viewModelScope.launch {
@@ -242,6 +345,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun editorClosed() {
         unsent = true
         reload()
+        // (The editor keeps preferences of its own: the last note, its panels.)
+        viewModelScope.launch { runCatching { loadPrefs() } }
     }
 
     // ---------------------------------------------------------------------
@@ -267,6 +372,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (!visible && unsent && _sync.value.target.kind != "none" && !_sync.value.status.needsPassword) {
             SyncWorker.runOnce(getApplication())
         }
-        if (visible) viewModelScope.launch { runCatching { loadPrefs() } }
+        if (visible) {
+            viewModelScope.launch {
+                runCatching { loadPrefs() }
+                if (_home.value.ready) {
+                    applyWidgetActions()
+                    // (A background sync may have changed the notes meanwhile.)
+                    reload()
+                }
+            }
+        } else {
+            refreshWidgets()
+        }
     }
 }
