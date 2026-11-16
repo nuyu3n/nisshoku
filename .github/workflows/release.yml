@@ -1,7 +1,7 @@
 # Builds 日色 for Windows, Linux and Android and publishes a GitHub release.
 #
 # Start it by pushing a tag `v<version>` matching the version in
-# tauri.conf.json (scripts/bump-version.mjs sets it), or by hand from the
+# tauri.conf.json and Cargo.toml (scripts/bump-version.mjs sets it), or by hand from the
 # Actions tab. The release stays a draft until every platform has uploaded,
 # then becomes the latest release: the apps' updaters read its latest.json.
 #
@@ -124,7 +124,7 @@ jobs:
       - name: Android NDK
         run: |
           sdkmanager --install "ndk;28.2.13676358"
-          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -136,17 +136,21 @@ jobs:
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
 
+      # The editor is the web app's, built by the Gradle build.
       - name: Install web dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
       - name: Signing key
-        working-directory: apps/desktop/src-tauri/gen/android
+        working-directory: apps/android
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -161,12 +165,14 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
           } > keystore.properties
 
+      # The native app (apps/android): Gradle builds the engine (cargo ndk),
+      # its Kotlin bindings and the web editor, then the APK for all ABIs.
       - name: Build the APK
-        working-directory: apps/desktop
+        working-directory: apps/android
         env:
           NISSHOKU_GDRIVE_CLIENT_ID: ${{ secrets.NISSHOKU_GDRIVE_CLIENT_ID }}
           NISSHOKU_GDRIVE_CLIENT_SECRET: ${{ secrets.NISSHOKU_GDRIVE_CLIENT_SECRET }}
-        run: pnpm tauri android build --apk
+        run: ./gradlew assembleRelease --console=plain
 
       - name: Upload to the release
         env:
@@ -174,7 +180,7 @@ jobs:
         run: |
           version="${TAG#v}"
           apk="nisshoku_${version}_android.apk"
-          cp apps/desktop/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "$apk"
+          cp apps/android/app/build/outputs/apk/release/app-release.apk "$apk"
           # The desktop jobs create the draft; wait for it if this job is first.
           for i in $(seq 1 60); do gh release view "$TAG" >/dev/null 2>&1 && break; sleep 20; done
           gh release upload "$TAG" "$apk" --clobber

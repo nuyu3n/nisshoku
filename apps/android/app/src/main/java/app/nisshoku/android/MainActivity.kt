@@ -135,7 +135,8 @@ class MainActivity : ComponentActivity() {
             val uri = link ?: return@LaunchedEffect
             if (!ready.ready) return@LaunchedEffect
             pendingLink.value = null
-            follow(uri, nav)
+            // (Not in this effect: taking the link restarts it.)
+            scope.launch { follow(uri, nav) }
         }
 
         val whatsNew by model.whatsNew.collectAsState()

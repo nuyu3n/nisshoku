@@ -1,8 +1,6 @@
 //! 日色 — the desktop app: commands for the window, over the Joplin-compatible
 //! data model and sync engine.
 
-#[cfg(target_os = "android")]
-mod android;
 mod host;
 
 use nisshoku_engine::{App, Call};
@@ -162,12 +160,6 @@ pub fn run() {
                 Some(dir) => std::path::PathBuf::from(dir),
                 None => app.path().app_data_dir()?,
             };
-            #[cfg(target_os = "android")]
-            {
-                if let Err(e) = android::init_tls() {
-                    tracing::error!("could not set up certificate checks: {e}");
-                }
-            }
             let ctx = nisshoku_engine::Ctx::open(&profile, &app.config().identifier)?;
             ctx.set_host(std::sync::Arc::new(host::TauriHost(app.handle().clone())));
             app.manage(ctx.clone());

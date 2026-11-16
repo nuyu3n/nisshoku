@@ -10,7 +10,7 @@
 //   node scripts/collect-builds.mjs
 //
 // It looks where each build leaves its files: target/release/bundle (Windows),
-// gen/android/.../outputs (Android) and the WSL copy of the repository
+// apps/android/.../outputs (Android) and the WSL copy of the repository
 // (~/nisshoku-build, see README) for Linux. Only files of the current product
 // name and version count, newest first; a platform that was not built is
 // reported and skipped. Update signatures (.sig) stay where they are: the
@@ -43,7 +43,7 @@ const P = esc(product);
 const V = esc(version);
 
 const bundle = join(root, "target/release/bundle");
-const android = join(root, "apps/desktop/src-tauri/gen/android/app/build/outputs");
+const android = join(root, "apps/android/app/build/outputs");
 
 /** The Linux bundle folder inside WSL, as a Windows path (\\wsl.localhost\...). */
 function wslBundle() {
@@ -60,8 +60,8 @@ const linux = wslBundle();
 const wanted = [
   ["Windows (NSIS)", join(bundle, "nsis"), new RegExp(`^${P}_${V}_x64-setup\\.exe$`), `${product}_${version}_windows_x64-setup.exe`],
   ["Windows (MSI)", join(bundle, "msi"), new RegExp(`^${P}_${V}_x64_ja-JP\\.msi$`), `${product}_${version}_windows_x64.msi`],
-  ["Android (APK)", join(android, "apk/universal/release"), /^app-universal-release\.apk$/, `${product}_${version}_android.apk`],
-  ["Android (AAB)", join(android, "bundle/universalRelease"), /^app-universal-release\.aab$/, `${product}_${version}_android.aab`],
+  ["Android (APK)", join(android, "apk/release"), /^app-release\.apk$/, `${product}_${version}_android.apk`],
+  ["Android (AAB)", join(android, "bundle/release"), /^app-release\.aab$/, `${product}_${version}_android.aab`],
   ["Linux (AppImage)", linux && join(linux, "appimage"), new RegExp(`^${P}_${V}_amd64\\.AppImage$`), `${product}_${version}_linux_amd64.AppImage`],
   ["Linux (deb)", linux && join(linux, "deb"), new RegExp(`^${P}_${V}_amd64\\.deb$`), `${product}_${version}_linux_amd64.deb`],
   ["Linux (rpm)", linux && join(linux, "rpm"), new RegExp(`^${P}-${V}-1\\.x86_64\\.rpm$`), `${product}_${version}_linux_x86_64.rpm`],
