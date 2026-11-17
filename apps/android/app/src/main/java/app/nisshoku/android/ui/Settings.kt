@@ -100,7 +100,7 @@ import kotlin.math.roundToInt
 
 /** One setting in a group: its shape is the group's (see `groupShape`). */
 @Composable
-private fun SettingRow(
+fun SettingRow(
     title: String,
     index: Int,
     count: Int,
@@ -124,7 +124,7 @@ private fun SettingRow(
 /** A choice of a few, as connected toggle buttons (Material 3 Expressive). */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -146,7 +146,7 @@ private fun Choice(options: List<Pair<String, String>>, selected: String, onSele
 
 /** A group's card holding something other than rows (choices, sliders). */
 @Composable
-private fun Block(index: Int, count: Int, content: @Composable () -> Unit) {
+fun Block(index: Int, count: Int, content: @Composable () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = groupShape(index, count), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
     }
@@ -154,7 +154,8 @@ private fun Block(index: Int, count: Int, content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> Unit, onSyncSetup: (String) -> Unit) {
+fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> Unit, onSyncSetup: (String) -> Unit, onStats: () -> Unit) {
+    var ask by remember { mutableStateOf<SettingAsk?>(null) }
     val prefs by model.prefs.collectAsState()
     val sync by model.sync.collectAsState()
     val context = LocalContext.current
@@ -257,6 +258,8 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
                     }
                 }
             }
+
+            encryptionSetting(sync) { ask = it }
 
             // ---------------------------------------------------- Appearance
             item { SectionLabel(tr("表示", "Appearance")) }
@@ -373,6 +376,8 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
                 )
             }
 
+            moreSettings(model, prefs, onAsk = { ask = it }, onStats = onStats)
+
             // ------------------------------------------------- Notifications
             item { SectionLabel(tr("通知", "Notifications")) }
             if (!notificationsOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -447,6 +452,7 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
         }
     }
 
+    ask?.let { SettingDialog(it, model, sync) { ask = null } }
     if (askPassword) {
         PasswordPrompt(
             onDismiss = { askPassword = false },
@@ -510,6 +516,7 @@ fun SyncSetupScreen(model: AppModel, kind: String, onBack: () -> Unit) {
                 model.syncNow()
                 onBack()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 error = e.message
             } finally {
                 busy = false

@@ -151,13 +151,13 @@ private fun DayCell(day: Int, entry: DiaryDay?, today: Boolean, future: Boolean,
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
+        // A day written is filled (in its mood's colour, if it has one).
+        val mood = moodOf(entry?.mood)
         if (written) {
-            Surface(color = if (today) scheme.primary else scheme.primaryContainer, shape = CircleShape, modifier = Modifier.fillMaxSize()) {}
+            Surface(color = mood?.color?.copy(alpha = if (today) 1f else 0.35f) ?: if (today) scheme.primary else scheme.primaryContainer, shape = CircleShape, modifier = Modifier.fillMaxSize()) {}
         }
-        // A mood, when the entry has one, in place of the number.
-        val mood = entry?.mood?.takeIf { it.isNotBlank() && it.length <= 4 && !it.first().isLetterOrDigit() }
         Text(
-            mood ?: "$day",
+            "$day",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (today || written) FontWeight.SemiBold else FontWeight.Normal,
             color = when {

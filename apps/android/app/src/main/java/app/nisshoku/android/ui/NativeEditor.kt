@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.then
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -42,6 +43,11 @@ import androidx.compose.material.icons.outlined.FormatListNumbered
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Title
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -262,6 +268,24 @@ private val continueLists = InputTransformation {
     }
 }
 
+/** "..." becomes "…" and "--" "――" as they are typed (the `smartPunctuation` preference). */
+private val smartPunctuation = InputTransformation {
+    if (length != originalText.length + 1 || !selection.collapsed) return@InputTransformation
+    val at = selection.start
+    if (at < 2) return@InputTransformation
+    val text = asCharSequence()
+    when {
+        at >= 3 && text[at - 1] == '.' && text[at - 2] == '.' && text[at - 3] == '.' -> {
+            replace(at - 3, at, "…")
+            selection = TextRange(at - 2)
+        }
+        text[at - 1] == '-' && text[at - 2] == '-' && (at < 3 || text[at - 3] != '-') -> {
+            replace(at - 2, at, "――")
+            selection = TextRange(at)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Edits of the format bar
 
@@ -331,7 +355,12 @@ private const val LINE_BREAK = '\n'
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onRich: () -> Unit) {
+fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onRich: () -> Unit, onOther: (String) -> Unit = {}) {
+    var diaryDate by remember { mutableStateOf<String?>(null) }
+    var pinned by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    var editingTags by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val prefs by model.prefs.collectAsState()
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -365,6 +394,7 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                 session.title = t
                 session.body = b
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 model.say(e.message ?: "")
             } finally {
                 saving = false
@@ -395,6 +425,7 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
         val note = try {
             Api.note(noteId)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             model.say(e.message ?: "")
             close()
             return@LaunchedEffect
@@ -409,6 +440,8 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
         session.title = note.title
         session.body = note.body
         readOnly = note.deletedTime > 0
+        pinned = note.pinned
+        diaryDate = note.diaryDate
         startAtTitle = note.title.isEmpty() && note.body.isEmpty() && !readOnly
         loaded = true
     }
@@ -501,6 +534,43 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                 IconButton(onClick = { leave(onRich) }) {
                     Icon(Icons.AutoMirrored.Outlined.Article, tr("リッチ表示で開く", "Open the formatted view"))
                 }
+                if (loaded && !readOnly) Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, tr("その他", "More")) }
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("タグ", "Tags")) },
+                            leadingIcon = { Icon(Icons.Outlined.Tag, null) },
+                            onClick = { menu = false; editingTags = true },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (pinned) tr("ピン留めを外す", "Unpin") else tr("ピン留め", "Pin")) },
+                            leadingIcon = { Icon(Icons.Outlined.PushPin, null) },
+                            onClick = {
+                                menu = false
+                                pinned = !pinned
+                                scope.launch { runCatching { Api.setPinned(noteId, pinned) } }
+                            },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("共有", "Share")) },
+                            leadingIcon = { Icon(Icons.Outlined.Share, null) },
+                            onClick = { menu = false; scope.launch { save(); shareNote(context, noteId) } },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("ゴミ箱へ移動", "Move to trash"), color = scheme.error) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = scheme.error) },
+                            onClick = {
+                                menu = false
+                                leave {
+                                    scope.launch {
+                                        runCatching { Api.trashNote(noteId) }
+                                        close()
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
             },
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -508,7 +578,15 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                 LoadingIndicator(Modifier.align(Alignment.Center))
             } else {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-                    BasicTextField(
+                    diaryDate?.let { date ->
+                        DiaryMetaBar(noteId, date) { day ->
+                            leave {
+                                scope.launch { model.diaryOf(day)?.let(onOther) }
+                            }
+                        }
+                    }
+                    // (A diary entry's title is its day, shown above.)
+                    if (diaryDate == null) BasicTextField(
                         state = title,
                         readOnly = readOnly,
                         textStyle = TextStyle(fontFamily = family, fontSize = (size * 1.55f).sp, lineHeight = (size * 2.1f).sp, fontWeight = FontWeight.Bold, color = scheme.onSurface),
@@ -530,14 +608,14 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                         state = body,
                         readOnly = readOnly,
                         textStyle = bodyStyle,
-                        inputTransformation = continueLists,
+                        inputTransformation = if (model.prefBool("smartPunctuation", true)) continueLists.then(smartPunctuation) else continueLists,
                         outputTransformation = markdown,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         cursorBrush = SolidColor(scheme.primary),
                         onTextLayout = { layout = it },
                         decorator = { inner ->
                             Box {
-                                if (body.text.isEmpty()) Text(tr("書きはじめる…", "Start writing…"), style = bodyStyle, color = scheme.outline.copy(alpha = 0.6f))
+                                if (body.text.isEmpty()) Text(if (diaryDate != null) diaryPrompt(diaryDate!!) else tr("書きはじめる…", "Start writing…"), style = bodyStyle, color = scheme.outline.copy(alpha = 0.6f))
                                 inner()
                             }
                         },
@@ -567,6 +645,10 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                     Spacer(Modifier.height(160.dp))
                 }
             }
+        }
+        if (editingTags) {
+            val current = model.home.collectAsState().value.notes.find { it.id == noteId }?.tags ?: emptyList()
+            TagsSheet(current = current, all = model.home.collectAsState().value.tags, onDismiss = { editingTags = false }, onSave = { model.setTags(noteId, it) })
         }
         if (loaded && !readOnly) {
             FormatBar(
@@ -609,4 +691,21 @@ private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit) {
             button(Icons.Outlined.KeyboardHide, tr("キーボードを閉じる", "Hide the keyboard")) { onHideKeyboard() }
         }
     }
+}
+
+/** A question to start the day's entry with (one a day, as in the web app). */
+@Composable
+private fun diaryPrompt(date: String): String {
+    val ja = listOf(
+        "今日いちばん心が動いたことは？", "今日、誰とどんな話をした？", "今日の自分に点数をつけるなら？ その理由は？",
+        "最近気になっていることは？", "今日食べたもので印象に残ったものは？", "うまくいかなかったこと、次に試すことは？",
+        "今日、ありがたいと思ったことは？", "明日の自分に伝えたいことは？",
+    )
+    val en = listOf(
+        "What moved you most today?", "Who did you talk with today, and about what?", "How would you score today, and why?",
+        "What has been on your mind lately?", "What did you eat today that stayed with you?", "What didn't go well, and what will you try next?",
+        "What are you grateful for today?", "What would you tell yourself tomorrow?",
+    )
+    val i = Math.floorMod(date.hashCode(), ja.size)
+    return tr(ja[i], en[i])
 }

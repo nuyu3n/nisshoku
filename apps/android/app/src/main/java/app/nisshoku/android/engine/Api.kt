@@ -41,6 +41,10 @@ data class NoteSummary(
     val todoCompleted: Boolean = false,
     val todoDue: Long = 0,
     val dueAllDay: Boolean = false,
+    val completedTime: Long = 0,
+    val order: Double = 0.0,
+    val goal: Long? = null,
+    val kind: String? = null,
     val tags: List<String> = emptyList(),
 )
 
@@ -57,9 +61,60 @@ data class Note(
     val parentId: String = "",
     val title: String = "",
     val body: String = "",
+    val createdTime: Long = 0,
     val updatedTime: Long = 0,
     val deletedTime: Long = 0,
+    val isConflict: Boolean = false,
+    val diaryDate: String? = null,
+    val pinned: Boolean = false,
     val isTodo: Boolean = false,
+    val todoCompleted: Boolean = false,
+    val todoDue: Long = 0,
+    val dueAllDay: Boolean = false,
+    val kind: String? = null,
+)
+
+@Serializable
+data class LinkedNote(val id: String, val title: String = "")
+
+/** Writing figures: today's characters, the streak, the last 30 days (`[date, chars]`). */
+@Serializable
+data class Stats(
+    val today: Long = 0,
+    val streak: Int = 0,
+    val days: List<kotlinx.serialization.json.JsonArray> = emptyList(),
+    val history: List<kotlinx.serialization.json.JsonArray> = emptyList(),
+    val totalNotes: Int = 0,
+    val totalChars: Long = 0,
+)
+
+@Serializable
+data class DiaryStats(
+    val streak: Int = 0,
+    val longestStreak: Int = 0,
+    val monthDays: Int = 0,
+    val totalDays: Int = 0,
+    val totalChars: Long = 0,
+)
+
+@Serializable
+data class DiaryEntry(
+    val noteId: String,
+    val date: String = "",
+    val title: String = "",
+    val excerpt: String = "",
+    val charCount: Int = 0,
+    val mood: String? = null,
+    val weather: String? = null,
+)
+
+@Serializable
+data class StorageInfo(
+    val databaseBytes: Long = 0,
+    val resourceBytes: Long = 0,
+    val resourceCount: Int = 0,
+    val unusedCount: Int = 0,
+    val unusedBytes: Long = 0,
 )
 
 @Serializable
@@ -201,6 +256,23 @@ object Api {
         get("save_note", "id" to id, "title" to title, "body" to body, "baseTitle" to baseTitle, "baseBody" to baseBody)
 
     suspend fun tags(): List<Tag> = get("list_tags")
+    suspend fun setNoteTags(noteId: String, titles: List<String>) =
+        Nisshoku.call("set_note_tags", args("noteId" to noteId, "titles" to kotlinx.serialization.json.JsonArray(titles.map { JsonPrimitive(it) })))
+
+    suspend fun renameTag(id: String, title: String) = Nisshoku.call("rename_tag", args("id" to id, "title" to title))
+    suspend fun deleteTag(id: String) = Nisshoku.call("delete_tag", args("id" to id))
+    suspend fun duplicateNote(id: String): Note = get("duplicate_note", "id" to id)
+    suspend fun saveAsTemplate(noteId: String): String = get("save_as_template", "noteId" to noteId)
+    suspend fun templates(): List<LinkedNote> = get("list_templates")
+    suspend fun clipUrl(url: String, parentId: String?): Note = get("clip_url", "url" to url, "parentId" to parentId)
+    suspend fun moveFolder(id: String, parentId: String) = Nisshoku.call("move_folder", args("id" to id, "parentId" to parentId))
+    suspend fun resolveConflict(id: String, keep: String): String = get("resolve_conflict", "id" to id, "keep" to keep)
+    suspend fun stats(): Stats = get("get_stats")
+    suspend fun diaryStats(today: String): DiaryStats = get("diary_stats", "today" to today)
+    suspend fun onThisDay(date: String): List<DiaryEntry> = get("on_this_day", "date" to date)
+    suspend fun diaryEntries(query: String? = null): List<DiaryEntry> = get("diary_entries", "query" to query)
+    suspend fun storageInfo(): StorageInfo = get("storage_info")
+    suspend fun deleteUnusedResources(): Int = get("delete_unused_resources")
     suspend fun diaryMonth(month: String): List<DiaryDay> = get("diary_month", "month" to month)
     suspend fun refreshWidgets() = Nisshoku.call("refresh_widgets")
     suspend fun applyWidgetActions(): Int = get("apply_widget_actions")

@@ -83,6 +83,11 @@ fun dueText(ms: Long, allDay: Boolean): String {
 fun overdue(ms: Long, allDay: Boolean): Boolean = ms > 0 &&
     if (allDay) Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate() < LocalDate.now() else ms < System.currentTimeMillis()
 
+/** How the lists show notes (the preferences `showExcerpt`, `compactList`). */
+data class ListLook(val excerpt: Boolean = true, val compact: Boolean = false)
+
+val LocalListLook = androidx.compose.runtime.compositionLocalOf { ListLook() }
+
 /** A note in a list: its title in the paper's serif, a line of its text, when it changed. */
 @Composable
 fun NoteCard(
@@ -94,6 +99,8 @@ fun NoteCard(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
+    val look = LocalListLook.current
+    val pad = if (look.compact) 9.dp else 14.dp
     Surface(
         shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -108,7 +115,7 @@ fun NoteCard(
                 },
             ),
     ) {
-        Row(Modifier.padding(start = if (onToggleDone != null) 4.dp else 18.dp, end = 18.dp, top = 14.dp, bottom = 14.dp)) {
+        Row(Modifier.padding(start = if (onToggleDone != null) 4.dp else 18.dp, end = 18.dp, top = pad, bottom = pad)) {
             if (onToggleDone != null) {
                 val done by animateFloatAsState(if (note.todoCompleted) 1f else 0f, label = "done")
                 IconButton(onClick = {
@@ -123,7 +130,7 @@ fun NoteCard(
                     )
                 }
             }
-            Column(Modifier.weight(1f).padding(top = if (onToggleDone != null) 10.dp else 0.dp)) {
+            Column(Modifier.weight(1f).padding(top = if (onToggleDone != null && !look.compact) 10.dp else 0.dp).align(if (look.compact) Alignment.CenterVertically else Alignment.Top)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (note.isConflict) {
                         Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
@@ -144,17 +151,17 @@ fun NoteCard(
                         Icon(Icons.Outlined.PushPin, tr("ピン留め", "Pinned"), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
                 }
-                if (note.excerpt.isNotBlank()) {
+                if (note.excerpt.isNotBlank() && look.excerpt) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         note.excerpt,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = if (look.compact) 1 else 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(if (look.compact) 3.dp else 6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val due = if (note.isTodo && note.todoDue > 0) dueText(note.todoDue, note.dueAllDay) else ""
                     if (due.isNotEmpty()) {
@@ -166,7 +173,7 @@ fun NoteCard(
                         )
                     }
                     Text(
-                        note.diaryDate ?: relativeTime(note.updatedTime),
+                        (note.diaryDate?.takeIf { it != note.title } ?: relativeTime(note.updatedTime)),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline,
                     )

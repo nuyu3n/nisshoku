@@ -246,6 +246,7 @@ private class WebHandler(private val context: Context) : WebViewAssetLoader.Path
             val stream = context.assets.open("web/$name")
             WebResourceResponse(mime(name), if (mime(name).startsWith("text/") || name.endsWith(".js")) "utf-8" else null, stream)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -301,6 +302,7 @@ private class Bridge(
             } catch (e: CommandException) {
                 reply(id, false, JSONObject.quote(e.message ?: cmd))
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.w("Editor", "$cmd failed: $e")
                 reply(id, false, JSONObject.quote(e.toString()))
             }
@@ -313,6 +315,7 @@ private class Bridge(
             try {
                 reply(id, true, Nisshoku.saveResource(Base64.decode(data, Base64.DEFAULT), name, mime))
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 reply(id, false, JSONObject.quote(e.message ?: "save_resource_bytes"))
             }
         }

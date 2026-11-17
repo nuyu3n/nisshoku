@@ -143,6 +143,7 @@ object Nisshoku {
             )
             true
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.w("Nisshoku", "could not open $path: $e")
             false
         }
@@ -155,6 +156,7 @@ object Nisshoku {
             context.contentResolver.openFileDescriptor(Uri.parse(uri), if (write) "wt" else "r")
                 ?.detachFd() ?: -1
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.w("Nisshoku", "could not open $uri: $e")
             -1
         }

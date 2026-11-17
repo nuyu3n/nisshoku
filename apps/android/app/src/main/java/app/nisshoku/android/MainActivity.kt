@@ -28,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -139,6 +140,22 @@ class MainActivity : ComponentActivity() {
             scope.launch { follow(uri, nav) }
         }
 
+        // What opens first (the `startup` preference), unless a link says otherwise.
+        var started by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+        LaunchedEffect(ready.ready) {
+            if (!ready.ready || started) return@LaunchedEffect
+            started = true
+            if (pendingLink.value != null) return@LaunchedEffect
+            val id = when (model.prefString("startup", "last")) {
+                "diary" -> model.todaysDiary()
+                "last" -> model.prefString("lastNoteId", "").takeIf { it.isNotEmpty() }?.let { last ->
+                    runCatching { app.nisshoku.android.engine.Api.note(last) }.getOrNull()?.takeIf { it.deletedTime == 0L }?.id
+                }
+                else -> null
+            }
+            if (id != null) nav.navigate("note/$id") { launchSingleTop = true }
+        }
+
         val whatsNew by model.whatsNew.collectAsState()
         whatsNew?.let { WhatsNewDialog(it, onDismiss = model::closeWhatsNew) }
         val update by model.update.collectAsState()
@@ -176,7 +193,10 @@ class MainActivity : ComponentActivity() {
                 SearchScreen(onBack = { nav.popBackStack() }, onOpen = open)
             }
             composable("settings") {
-                SettingsScreen(model = model, snackbar = snackbar, onBack = { nav.popBackStack() }, onSyncSetup = { nav.navigate("sync?kind=$it") })
+                SettingsScreen(model = model, snackbar = snackbar, onBack = { nav.popBackStack() }, onSyncSetup = { nav.navigate("sync?kind=$it") }, onStats = { nav.navigate("stats") })
+            }
+            composable("stats") {
+                app.nisshoku.android.ui.StatsScreen(model = model, onBack = { nav.popBackStack() })
             }
             composable("sync?kind={kind}") { entry ->
                 SyncSetupScreen(model = model, kind = entry.arguments?.getString("kind").orEmpty(), onBack = { nav.popBackStack() })

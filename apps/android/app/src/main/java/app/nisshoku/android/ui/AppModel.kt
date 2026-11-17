@@ -10,6 +10,7 @@ import app.nisshoku.android.Shortcuts
 import app.nisshoku.android.engine.Folder
 import app.nisshoku.android.engine.Release
 import app.nisshoku.android.engine.Tag
+import app.nisshoku.android.engine.Stats as EngineStats
 import app.nisshoku.desktop.Widgets
 import kotlinx.coroutines.delay
 import app.nisshoku.android.engine.Nisshoku
@@ -65,6 +66,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private val _progress = MutableStateFlow<SyncProgress?>(null)
     val progress: StateFlow<SyncProgress?> = _progress.asStateFlow()
+
+    private val _stats = MutableStateFlow(EngineStats())
+    val stats: StateFlow<EngineStats> = _stats.asStateFlow()
 
     private val _messages = Channel<Message>(Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
@@ -124,6 +128,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 SyncWorker.schedule(getApplication(), pref("backgroundSyncMinutes")?.jsonPrimitive?.intOrNull ?: 60)
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             _home.update { it.copy(ready = true, loading = false) }
             say(e.message ?: "")
         }
@@ -227,7 +232,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 Api.setPreferences(next)
                 if (key == "backgroundSyncMinutes") SyncWorker.schedule(getApplication(), prefInt(key, 60))
                 if (key in setOf("language", "theme", "accent", "dailyGoal")) refreshWidgets()
+                if (key == "sortNotes") reload()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 say(e.message ?: "")
             }
         }
@@ -255,12 +262,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 val scope = _home.value.scope
                 val folders = Api.folders()
                 val tags = Api.tags()
-                val notes = Api.notes(scope)
+                val notes = sortNotes(Api.notes(scope), scope, prefString("sortNotes", "updated"))
+                runCatching { Api.stats() }.getOrNull()?.let { _stats.value = it }
                 if (scope == _home.value.scope) {
                     _home.update { it.copy(folders = folders, tags = tags, notes = notes, loading = false, version = it.version + 1) }
                 }
                 refreshWidgets()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _home.update { it.copy(loading = false) }
                 say(e.message ?: "")
             }
@@ -272,6 +281,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val folder = (_home.value.scope as? Scope.InFolder)?.id
         Api.createNote(folder, title, body).id.also { unsent = true; reload() }
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
     }
 
@@ -281,6 +291,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         reload()
         true
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); false
     }
 
@@ -291,6 +302,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     suspend fun diaryOf(date: String): String? = try {
         Api.openDiary(date).id.also { reload() }
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
     }
 
@@ -309,6 +321,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 }
                 reload()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 say(e.message ?: "")
             }
         }
@@ -318,7 +331,76 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun deleteForever(note: NoteSummary) = act { Api.deleteForever(note.id) }
     fun emptyTrash() = act { Api.emptyTrash() }
     fun togglePinned(note: NoteSummary) = act { Api.setPinned(note.id, !note.pinned) }
-    fun toggleDone(note: NoteSummary) = act { Api.setTodoCompleted(note.id, !note.todoCompleted) }
+    /** Ticks a task off (or back on); ticking off offers an undo. */
+    fun toggleDone(note: NoteSummary) {
+        val done = !note.todoCompleted
+        // Shown at once; the list follows the engine after.
+        _home.update { s -> s.copy(notes = s.notes.map { if (it.id == note.id) it.copy(todoCompleted = done, completedTime = if (done) System.currentTimeMillis() else 0) else it }) }
+        act { Api.setTodoCompleted(note.id, done) }
+        if (done) {
+            say(trNow("「${note.title.ifBlank { "無題" }}」を完了しました", "Done: ${note.title.ifBlank { "Untitled" }}"), trNow("元に戻す", "Undo")) {
+                Api.setTodoCompleted(note.id, false)
+                reload()
+            }
+        }
+    }
+
+    fun setTags(noteId: String, titles: List<String>) = act { Api.setNoteTags(noteId, titles) }
+    fun renameTag(id: String, title: String) = act { Api.renameTag(id, title) }
+    fun deleteTag(id: String) = act {
+        Api.deleteTag(id)
+        if ((_home.value.scope as? Scope.WithTag)?.id == id) _home.update { it.copy(scope = Scope.All) }
+    }
+    fun moveFolder(id: String, parentId: String) = act { Api.moveFolder(id, parentId) }
+
+    /** Renames a note (its text stays). */
+    fun renameNote(id: String, title: String) = act {
+        val note = Api.note(id)
+        Api.saveNote(id, title, note.body, note.title, note.body)
+    }
+
+    /** A copy of the note; its id. */
+    suspend fun duplicate(id: String): String? = try {
+        Api.duplicateNote(id).id.also { unsent = true; reload() }
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        say(e.message ?: ""); null
+    }
+
+    fun saveAsTemplate(id: String) = act {
+        Api.saveAsTemplate(id)
+        say(trNow("テンプレートとして保存しました", "Saved as a template"))
+    }
+
+    /** A new note from a template (`{{date}}`, `{{time}}`, `{{datetime}}` filled in); its id. */
+    suspend fun fromTemplate(templateId: String): String? = try {
+        val t = Api.note(templateId)
+        val now = java.time.LocalDateTime.now()
+        val date = now.toLocalDate().toString()
+        val time = "%02d:%02d".format(now.hour, now.minute)
+        fun fill(s: String) = s.replace("{{date}}", date).replace("{{time}}", time).replace("{{datetime}}", "$date $time")
+        newNote(fill(t.title), fill(t.body))
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        say(e.message ?: ""); null
+    }
+
+    /** A web page saved as a note; its id. */
+    suspend fun clip(url: String): String? = try {
+        say(trNow("ページを取り込んでいます…", "Fetching the page…"))
+        Api.clipUrl(url.trim(), (_home.value.scope as? Scope.InFolder)?.id).id.also { unsent = true; reload() }
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        say(e.message ?: ""); null
+    }
+
+    /** Keeps one side of a conflict; the id of the note kept. */
+    suspend fun resolveConflict(id: String, keep: String): String? = try {
+        Api.resolveConflict(id, keep).also { unsent = true; reload() }
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        say(e.message ?: ""); null
+    }
     fun move(note: NoteSummary, folderId: String) = act { Api.moveNote(note.id, folderId) }
     fun createFolder(title: String, parentId: String? = null) = act { Api.createFolder(title, parentId) }
     fun renameFolder(id: String, title: String) = act { Api.renameFolder(id, title) }
@@ -336,6 +418,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 unsent = true
                 reload()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 say(e.message ?: "")
             }
         }
@@ -357,6 +440,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             try {
                 onStatus(Api.syncNow())
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 say(e.message ?: "")
             }
         }
@@ -385,4 +469,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             refreshWidgets()
         }
     }
+}
+
+/** The list's order (the web app's `sortNotes`): pinned first, then by the preference. */
+fun sortNotes(notes: List<NoteSummary>, scope: Scope, sort: String): List<NoteSummary> {
+    if (scope == Scope.Diary || scope == Scope.Trash || scope is Scope.Search) return notes
+    val sorted = when (sort) {
+        "custom" -> notes.sortedWith(compareByDescending<NoteSummary> { it.order }.thenByDescending { it.createdTime })
+        "created" -> notes.sortedByDescending { it.createdTime }
+        "title" -> notes.sortedWith(compareBy(java.text.Collator.getInstance(java.util.Locale.JAPANESE)) { it.title })
+        else -> notes.sortedByDescending { it.updatedTime }
+    }
+    return sorted.sortedByDescending { it.pinned }
 }

@@ -30,6 +30,7 @@ object Shortcuts {
                 shortcut("diary", trNow("日記", "Diary"), trNow("今日の日記", "Today's diary"), R.drawable.shortcut_diary_icon, "nisshoku://diary"),
             )
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.w("Shortcuts", "could not set the shortcuts: $e")
         }
     }

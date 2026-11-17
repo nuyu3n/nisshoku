@@ -63,6 +63,16 @@ import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.VerticalAlignTop
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -169,6 +179,23 @@ fun HomeScreen(
     var newTask by remember { mutableStateOf(false) }
     var dueFor by remember { mutableStateOf<NoteSummary?>(null) }
     var folderEdit by remember { mutableStateOf<FolderEdit?>(null) }
+    var tagsFor by remember { mutableStateOf<NoteSummary?>(null) }
+    var renameFor by remember { mutableStateOf<NoteSummary?>(null) }
+    var deleteFor by remember { mutableStateOf<NoteSummary?>(null) }
+    var tagEdit by remember { mutableStateOf<app.nisshoku.android.engine.Tag?>(null) }
+    var folderMove by remember { mutableStateOf<Folder?>(null) }
+    var subOf by remember { mutableStateOf<String?>(null) }
+    var templates by remember { mutableStateOf(false) }
+    var clipping by remember { mutableStateOf(false) }
+    var confirmEmpty by remember { mutableStateOf(false) }
+    var overflow by remember { mutableStateOf(false) }
+    val stats by model.stats.collectAsState()
+    val prefs by model.prefs.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val look = ListLook(
+        excerpt = (prefs["showExcerpt"] as? kotlinx.serialization.json.JsonPrimitive)?.content != "false",
+        compact = (prefs["compactList"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true",
+    )
 
     // "New task" asked for from outside (a widget, a launcher shortcut).
     val newTaskRequests by model.newTaskRequests.collectAsState()
@@ -183,12 +210,19 @@ fun HomeScreen(
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(fabOpen) { fabOpen = false }
 
-    androidx.compose.runtime.CompositionLocalProvider(LocalTags provides state.tags) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalTags provides state.tags, LocalListLook provides look) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
             Drawer(
                 state = state,
+                today = {
+                    TodayCard(stats, model.prefInt("dailyGoal", 0)) {
+                        scope.launch { drawer.close() }
+                        scope.launch { model.todaysDiary()?.let(onOpen) }
+                    }
+                },
+                onEditTag = { tagEdit = it },
                 onScope = {
                     model.setScope(it)
                     scope.launch { drawer.close() }
@@ -224,6 +258,36 @@ fun HomeScreen(
                     actions = {
                         IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, tr("検索", "Search")) }
                         SyncButton(sync.status.state, sync.target.kind != "none", onSync = model::syncNow, onSetUp = onSettings)
+                        Box {
+                            IconButton(onClick = { overflow = true }) { Icon(Icons.Outlined.MoreVert, tr("その他", "More")) }
+                            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }, shape = RoundedCornerShape(16.dp)) {
+                                DropdownMenuItem(
+                                    text = { Text(tr("テンプレートから作成", "New from a template")) },
+                                    leadingIcon = { Icon(Icons.Outlined.Description, null) },
+                                    onClick = { overflow = false; templates = true },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(tr("Web ページを取り込む", "Clip a web page")) },
+                                    leadingIcon = { Icon(Icons.Outlined.Language, null) },
+                                    onClick = { overflow = false; clipping = true },
+                                )
+                                if (state.scope is Scope.InFolder) {
+                                    DropdownMenuItem(
+                                        text = { Text(tr("ノートブックを編集", "Edit the notebook")) },
+                                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                        onClick = {
+                                            overflow = false
+                                            state.folders.find { it.id == (state.scope as Scope.InFolder).id }?.let { folderEdit = FolderEdit(it.id, it.title, it.icon, it.color) }
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(tr("設定", "Settings")) },
+                                    leadingIcon = { Icon(Icons.Outlined.Settings, null) },
+                                    onClick = { overflow = false; onSettings() },
+                                )
+                            }
+                        }
                     },
                     scrollBehavior = bar,
                 )
@@ -270,14 +334,22 @@ fun HomeScreen(
                     onTrash = model::trash,
                     onPin = model::togglePinned,
                     onDone = model::toggleDone,
-                    onEmptyTrash = model::emptyTrash,
-                    header = if (state.scope == Scope.Diary) ({
-                        DiaryCalendar(
-                            version = state.version,
-                            weekStartsMonday = model.prefString("weekStart", "sun") == "mon",
-                            onOpen = { date -> scope.launch { model.diaryOf(date)?.let(onOpen) } },
-                        )
-                    }) else null,
+                    onEmptyTrash = { confirmEmpty = true },
+                    header = when {
+                        state.scope == Scope.Diary -> ({
+                            DiaryCalendar(
+                                version = state.version,
+                                weekStartsMonday = model.prefString("weekStart", "sun") == "mon",
+                                onOpen = { date -> scope.launch { model.diaryOf(date)?.let(onOpen) } },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            DiaryHeader(state.version, onOpen)
+                        })
+                        state.scope is Scope.InFolder && state.folders.any { it.parentId == (state.scope as Scope.InFolder).id } -> ({
+                            SubNotebooks(state.folders.filter { it.parentId == (state.scope as Scope.InFolder).id }) { model.setScope(Scope.InFolder(it.id)) }
+                        })
+                        else -> null
+                    },
                 )
             }
         }
@@ -293,10 +365,94 @@ fun HomeScreen(
             onMove = { movingNote = note },
             onTrash = { model.trash(note) },
             onRestore = { model.restore(note) },
-            onDelete = { model.deleteForever(note) },
+            onDelete = { deleteFor = note },
+            onRename = { renameFor = note },
+            onTags = { tagsFor = note },
+            onDuplicate = { scope.launch { model.duplicate(note.id)?.let(onOpen) } },
+            onTemplate = { model.saveAsTemplate(note.id) },
+            onShare = { scope.launch { shareNote(context, note.id) } },
             onDue = { dueFor = note },
             onClearDue = { model.setDue(note, 0, false) },
             onToggleTodo = { model.toggleTodo(note) },
+        )
+    }
+    tagsFor?.let { note ->
+        TagsSheet(current = note.tags, all = state.tags, onDismiss = { tagsFor = null }, onSave = { model.setTags(note.id, it) })
+    }
+    renameFor?.let { note ->
+        TextPrompt(
+            title = tr("名前を変更", "Rename"),
+            label = tr("タイトル", "Title"),
+            confirm = tr("変更", "Rename"),
+            initial = note.title,
+            onDismiss = { renameFor = null },
+            onDone = {
+                model.renameNote(note.id, it)
+                renameFor = null
+            },
+        )
+    }
+    deleteFor?.let { note ->
+        ConfirmDialog(
+            title = tr("完全に削除しますか？", "Delete forever?"),
+            text = tr("「${note.title.ifBlank { "無題" }}」を完全に削除します。元に戻せません。", "\"${note.title.ifBlank { "Untitled" }}\" will be deleted for good. This cannot be undone."),
+            confirm = tr("削除", "Delete"),
+            onDismiss = { deleteFor = null },
+            onConfirm = { model.deleteForever(note) },
+        )
+    }
+    if (confirmEmpty) {
+        ConfirmDialog(
+            title = tr("ゴミ箱を空にしますか？", "Empty the trash?"),
+            text = tr("ゴミ箱の ${state.notes.size} 件を完全に削除します。元に戻せません。", "The ${state.notes.size} notes in the trash will be deleted for good. This cannot be undone."),
+            confirm = tr("空にする", "Empty"),
+            onDismiss = { confirmEmpty = false },
+            onConfirm = model::emptyTrash,
+        )
+    }
+    if (templates) {
+        TemplateSheet(onDismiss = { templates = false }) { t ->
+            templates = false
+            scope.launch { model.fromTemplate(t.id)?.let(onOpen) }
+        }
+    }
+    if (clipping) {
+        ClipDialog(onDismiss = { clipping = false }) { url ->
+            clipping = false
+            scope.launch { model.clip(url)?.let(onOpen) }
+        }
+    }
+    tagEdit?.let { tag ->
+        TagDialog(
+            tag = tag,
+            onDismiss = { tagEdit = null },
+            onRename = { model.renameTag(tag.id, it); tagEdit = null },
+            onDelete = { model.deleteTag(tag.id); tagEdit = null },
+        )
+    }
+    folderMove?.let { folder ->
+        // A notebook goes under another (not under itself or its own), or to the top.
+        val inside = descendants(state.folders, folder.id) + folder.id
+        MoveSheet(
+            folders = state.folders.filter { !it.isDiary && it.id !in inside },
+            top = true,
+            onDismiss = { folderMove = null },
+            onPick = {
+                model.moveFolder(folder.id, it?.id ?: "")
+                folderMove = null
+            },
+        )
+    }
+    subOf?.let { parent ->
+        TextPrompt(
+            title = tr("新しいサブノートブック", "New sub-notebook"),
+            label = tr("名前", "Name"),
+            confirm = tr("作成", "Create"),
+            onDismiss = { subOf = null },
+            onDone = {
+                model.createFolder(it, parent)
+                subOf = null
+            },
         )
     }
     dueFor?.let { note ->
@@ -313,8 +469,8 @@ fun HomeScreen(
         MoveSheet(
             folders = state.folders.filter { !it.isDiary },
             onDismiss = { movingNote = null },
-            onPick = {
-                model.move(note, it.id)
+            onPick = { folder ->
+                folder?.let { model.move(note, it.id) }
                 movingNote = null
             },
         )
@@ -344,6 +500,8 @@ fun HomeScreen(
                 folderEdit = null
             },
             onDelete = edit.id?.let { id -> { model.trashFolder(id); folderEdit = null } },
+            onMove = edit.id?.let { id -> { folderEdit = null; folderMove = state.folders.find { it.id == id } } },
+            onNewSub = edit.id?.let { id -> { folderEdit = null; subOf = id } },
         )
     }
 }
@@ -417,6 +575,25 @@ private fun NoteList(
                     Scope.Todo -> EmptyState(Icons.Outlined.TaskAlt, tr("タスクはありません", "No tasks"), tr("＋ からタスクを追加できます", "Add one with +"))
                     Scope.Diary -> EmptyState(Icons.Outlined.AutoStories, tr("日記はまだありません", "No diary entries yet"), tr("＋ から今日の日記を書きましょう", "Write today's with +"))
                     else -> EmptyState(Icons.Outlined.Inbox, tr("ノートはまだありません", "No notes yet"), tr("＋ から書き始めましょう", "Start writing with +"))
+                }
+            }
+        }
+        return
+    }
+    if (state.scope == Scope.Todo) {
+        val groups = groupTasks(state.notes)
+        LazyColumn(
+            state = list,
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            for ((group, tasks) in groups) {
+                item(key = "g-$group") {
+                    SectionLabel("${group.label()}  ${tasks.size}", Modifier.animateItem())
+                }
+                itemsIndexed(tasks, key = { _, n -> n.id }) { i, note ->
+                    SwipeNote(note, groupShape(i, tasks.size), state.scope, onOpen, onActions, onTrash, onPin, onDone, Modifier.animateItem())
                 }
             }
         }
@@ -520,6 +697,8 @@ private fun SwipeNote(
 @Composable
 private fun Drawer(
     state: HomeState,
+    today: @Composable () -> Unit,
+    onEditTag: (app.nisshoku.android.engine.Tag) -> Unit,
     onScope: (Scope) -> Unit,
     onSettings: () -> Unit,
     onNewFolder: () -> Unit,
@@ -531,8 +710,10 @@ private fun Drawer(
                 tr("日色", "Nisshoku"),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 16.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 12.dp),
             )
+            today()
+            Spacer(Modifier.height(12.dp))
             fun item(scope: Scope): Boolean = state.scope == scope
             DrawerItem(tr("すべてのノート", "All notes"), Icons.AutoMirrored.Outlined.Notes, item(Scope.All)) { onScope(Scope.All) }
             DrawerItem(tr("ピン留め", "Pinned"), Icons.Outlined.PushPin, item(Scope.Pinned)) { onScope(Scope.Pinned) }
@@ -571,7 +752,16 @@ private fun Drawer(
                     NavigationDrawerItem(
                         label = { Text(tag.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         icon = { Icon(Icons.Outlined.Tag, null) },
-                        badge = { Text("${tag.noteCount}", style = MaterialTheme.typography.labelMedium) },
+                        badge = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${tag.noteCount}", style = MaterialTheme.typography.labelMedium)
+                                if ((state.scope as? Scope.WithTag)?.id == tag.id) {
+                                    IconButton(onClick = { onEditTag(tag) }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Edit, tr("編集", "Edit"), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                        },
                         selected = (state.scope as? Scope.WithTag)?.id == tag.id,
                         onClick = { onScope(Scope.WithTag(tag.id)) },
                         modifier = Modifier.height(52.dp),
@@ -625,6 +815,11 @@ private fun NoteActions(
     onTrash: () -> Unit,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
+    onRename: () -> Unit,
+    onTags: () -> Unit,
+    onDuplicate: () -> Unit,
+    onTemplate: () -> Unit,
+    onShare: () -> Unit,
     onDue: () -> Unit,
     onClearDue: () -> Unit,
     onToggleTodo: () -> Unit,
@@ -645,12 +840,14 @@ private fun NoteActions(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
-        Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             val actions = if (inTrash) listOf(
                 Triple(tr("元に戻す", "Restore"), Icons.Outlined.Restore, onRestore),
                 Triple(tr("完全に削除", "Delete forever"), Icons.Outlined.DeleteForever, onDelete),
             ) else listOfNotNull(
+                Triple(tr("名前を変更", "Rename"), Icons.Outlined.DriveFileRenameOutline, onRename),
                 Triple(if (note.pinned) tr("ピン留めを外す", "Unpin") else tr("ピン留め", "Pin"), Icons.Outlined.PushPin, onPin),
+                Triple(tr("タグ", "Tags") + if (note.tags.isNotEmpty()) "（${note.tags.joinToString("、")}）" else "", Icons.Outlined.Tag, onTags),
                 Triple(if (note.todoDue > 0) tr("期限を変更", "Change the due date") else tr("期限を設定", "Set a due date"), Icons.Outlined.Event, onDue),
                 if (note.todoDue > 0) Triple(tr("期限を消す", "Remove the due date"), Icons.Outlined.EventBusy, onClearDue) else null,
                 Triple(
@@ -659,6 +856,9 @@ private fun NoteActions(
                     onToggleTodo,
                 ),
                 Triple(tr("ノートブックへ移動", "Move to notebook"), Icons.Outlined.DriveFileMove, onMove),
+                Triple(tr("複製", "Duplicate"), Icons.Outlined.ContentCopy, onDuplicate),
+                Triple(tr("テンプレートとして保存", "Save as template"), Icons.Outlined.Description, onTemplate),
+                Triple(tr("共有", "Share"), Icons.Outlined.Share, onShare),
                 Triple(tr("ゴミ箱へ移動", "Move to trash"), Icons.Outlined.Delete, onTrash),
             )
             actions.forEachIndexed { i, (label, icon, run) ->
@@ -677,10 +877,20 @@ private fun NoteActions(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MoveSheet(folders: List<Folder>, onDismiss: () -> Unit, onPick: (Folder) -> Unit) {
+private fun MoveSheet(folders: List<Folder>, onDismiss: () -> Unit, top: Boolean = false, onPick: (Folder?) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Text(tr("移動先", "Move to"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
         LazyColumn(contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (top) {
+                item(key = "top") {
+                    ListItem(
+                        headlineContent = { Text(tr("いちばん上", "The top level")) },
+                        leadingContent = { Icon(Icons.Outlined.VerticalAlignTop, null) },
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier.padding(bottom = 6.dp).clip(RoundedCornerShape(20.dp)).clickable { onPick(null) },
+                    )
+                }
+            }
             val items = tree(folders)
             itemsIndexed(items, key = { _, it -> it.first.id }) { i, (folder, depth) ->
                 ListItem(
@@ -736,7 +946,14 @@ private val folderColors = listOf("", "#d9622b", "#c2412d", "#c9a227", "#5e8c4a"
 private val folderIcons = listOf("", "📓", "📝", "📚", "💡", "✏️", "🌙", "🌸", "⭐", "🎵", "🏠", "💼")
 
 @Composable
-private fun FolderDialog(edit: FolderEdit, onDismiss: () -> Unit, onSave: (String, String, String) -> Unit, onDelete: (() -> Unit)?) {
+private fun FolderDialog(
+    edit: FolderEdit,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+    onDelete: (() -> Unit)?,
+    onMove: (() -> Unit)? = null,
+    onNewSub: (() -> Unit)? = null,
+) {
     var title by remember { mutableStateOf(edit.title) }
     var icon by remember { mutableStateOf(edit.icon) }
     var color by remember { mutableStateOf(edit.color) }
@@ -762,6 +979,10 @@ private fun FolderDialog(edit: FolderEdit, onDismiss: () -> Unit, onSave: (Strin
                     ChoiceRow(folderColors, color, { color = it }) { value, _ ->
                         val c = parseColor(value)
                         Box(Modifier.size(22.dp).clip(RoundedCornerShape(50)).background(c ?: MaterialTheme.colorScheme.surfaceVariant))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        onNewSub?.let { AssistChip(onClick = it, label = { Text(tr("サブノートブック", "Sub-notebook")) }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null, Modifier.size(18.dp)) }) }
+                        onMove?.let { AssistChip(onClick = it, label = { Text(tr("移動", "Move")) }, leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null, Modifier.size(18.dp)) }) }
                     }
                 }
             }
@@ -792,5 +1013,45 @@ private fun ChoiceRow(values: List<String>, selected: String, onPick: (String) -
                 contentAlignment = Alignment.Center,
             ) { content(v, on) }
         }
+    }
+}
+
+/** The ids of a notebook's sub-notebooks, at every depth. */
+private fun descendants(folders: List<Folder>, id: String): Set<String> {
+    val out = mutableSetOf<String>()
+    fun walk(p: String) {
+        for (f in folders) if (f.parentId == p && out.add(f.id)) walk(f.id)
+    }
+    walk(id)
+    return out
+}
+
+/** A tag: renamed, or deleted (from every note). */
+@Composable
+private fun TagDialog(tag: app.nisshoku.android.engine.Tag, onDismiss: () -> Unit, onRename: (String) -> Unit, onDelete: () -> Unit) {
+    var title by remember { mutableStateOf(tag.title) }
+    var confirm by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("タグ", "Tag")) },
+        text = {
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(tr("名前", "Name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        },
+        confirmButton = { Button(onClick = { onRename(title.trim()) }, enabled = title.isNotBlank()) { Text(tr("保存", "Save")) } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { confirm = true }) { Text(tr("削除", "Delete"), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss) { Text(tr("キャンセル", "Cancel")) }
+            }
+        },
+    )
+    if (confirm) {
+        ConfirmDialog(
+            title = tr("タグを削除しますか？", "Delete the tag?"),
+            text = tr("「${tag.title}」をすべてのノートから外します。ノートは消えません。", "\"${tag.title}\" is taken off every note. The notes stay."),
+            confirm = tr("削除", "Delete"),
+            onDismiss = { confirm = false },
+            onConfirm = onDelete,
+        )
     }
 }

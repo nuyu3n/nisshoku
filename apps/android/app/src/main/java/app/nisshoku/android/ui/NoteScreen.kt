@@ -26,20 +26,27 @@ fun NoteScreen(noteId: String, dark: Boolean, model: AppModel, onClose: () -> Un
     // The note shown (a link in the formatted editor may lead to another).
     var current by rememberSaveable(noteId) { mutableStateOf(noteId) }
     var mode by rememberSaveable(noteId) { mutableStateOf<String?>(null) }
+    // The note opened last (where "on start, open the last note" goes back to).
+    LaunchedEffect(current) {
+        if (model.prefString("lastNoteId", "") != current) model.setPref("lastNoteId", kotlinx.serialization.json.JsonPrimitive(current))
+    }
     LaunchedEffect(noteId) {
         if (mode != null) return@LaunchedEffect
-        mode = when (model.prefString("editorMode", "auto")) {
-            "native" -> "native"
-            "rich" -> "rich"
-            else -> {
-                val body = runCatching { Api.note(noteId).body }.getOrDefault("")
-                if (needsRichEditor(body)) "rich" else "native"
-            }
+        val note = runCatching { Api.note(noteId) }.getOrNull()
+        mode = when {
+            // A conflict copy: the formatted editor shows it beside the original.
+            note?.isConflict == true -> "rich"
+            model.prefString("editorMode", "auto") == "native" -> "native"
+            model.prefString("editorMode", "auto") == "rich" -> "rich"
+            needsRichEditor(note?.body ?: "") -> "rich"
+            else -> "native"
         }
     }
     AnimatedContent(mode, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "editor") { shown ->
         when (shown) {
-            "native" -> NativeEditorScreen(noteId = current, model = model, onClose = onClose, onRich = { mode = "rich" })
+            "native" -> androidx.compose.runtime.key(current) {
+                NativeEditorScreen(noteId = current, model = model, onClose = onClose, onRich = { mode = "rich" }, onOther = { current = it })
+            }
             "rich" -> EditorScreen(noteId = current, dark = dark, onClose = onClose, onPlain = { mode = "native" }, onOpened = { current = it })
             else -> Box(Modifier.fillMaxSize())
         }
