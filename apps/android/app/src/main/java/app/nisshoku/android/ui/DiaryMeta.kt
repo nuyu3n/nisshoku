@@ -45,6 +45,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.nisshoku.android.LocalEnglish
 import app.nisshoku.android.engine.Api
+import app.nisshoku.android.engine.DiaryEvent
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Schedule
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import app.nisshoku.android.engine.Nisshoku
 import app.nisshoku.android.tr
 import kotlinx.coroutines.launch
@@ -92,10 +98,31 @@ fun DiaryMetaBar(noteId: String, date: String, onDay: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var mood by remember(noteId) { mutableStateOf<String?>(null) }
     var weather by remember(noteId) { mutableStateOf<String?>(null) }
+    val events = remember(noteId) { androidx.compose.runtime.mutableStateListOf<DiaryEvent>() }
+    var eventsLoaded by remember(noteId) { mutableStateOf(false) }
     LaunchedEffect(noteId) {
         val e = runCatching { Api.diaryEntries() }.getOrDefault(emptyList()).find { it.noteId == noteId }
         mood = moodOf(e?.mood)?.key
         weather = WEATHERS.find { it.key == (LEGACY[e?.weather] ?: e?.weather) }?.key
+        events.clear()
+        events.addAll(e?.events.orEmpty())
+        eventsLoaded = true
+    }
+    // The events are saved a moment after the last change.
+    LaunchedEffect(noteId, eventsLoaded) {
+        if (!eventsLoaded) return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { events.toList() }.drop(1).collectLatest { list ->
+            kotlinx.coroutines.delay(600)
+            runCatching { Api.setDiaryEvents(noteId, list.filter { it.text.isNotBlank() }.sortedBy { it.time }) }
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(noteId) {
+        onDispose {
+            if (eventsLoaded) {
+                val list = events.filter { it.text.isNotBlank() }.sortedBy { it.time }
+                Nisshoku.scope.launch { runCatching { Api.setDiaryEvents(noteId, list) } }
+            }
+        }
     }
     fun save() {
         scope.launch {
@@ -163,5 +190,64 @@ fun DiaryMetaBar(noteId: String, date: String, onDay: (String) -> Unit) {
                 )
             }
         }
+        EventTimeline(events)
     }
+}
+
+/** What happened when: a time and a line each, in time order. */
+@Composable
+private fun EventTimeline(events: androidx.compose.runtime.snapshots.SnapshotStateList<DiaryEvent>) {
+    var picking by remember { mutableStateOf<Int?>(null) }
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Schedule, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
+            Text(tr("  出来事", "  Events"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline, modifier = Modifier.weight(1f))
+            androidx.compose.material3.TextButton(onClick = {
+                val now = java.time.LocalTime.now()
+                events += DiaryEvent("%02d:%02d".format(now.hour, now.minute), "")
+            }) {
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
+                Text(tr("追加", "Add"))
+            }
+        }
+        events.forEachIndexed { i, e ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                androidx.compose.material3.AssistChip(onClick = { picking = i }, label = { Text(e.time.ifEmpty { "--:--" }) })
+                androidx.compose.foundation.text.BasicTextField(
+                    value = e.text,
+                    onValueChange = { events[i] = e.copy(text = it) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        androidx.compose.foundation.layout.Box {
+                            if (e.text.isEmpty()) Text(tr("何があった？", "What happened?"), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyLarge)
+                            inner()
+                        }
+                    },
+                    modifier = Modifier.weight(1f).padding(start = 10.dp),
+                )
+                IconButton(onClick = { events.removeAt(i) }) { Icon(Icons.Outlined.Close, tr("削除", "Remove"), modifier = Modifier.size(18.dp)) }
+            }
+        }
+    }
+    picking?.let { i ->
+        val (h, m) = events.getOrNull(i)?.time?.split(":")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] } ?: (12 to 0)
+        TimeDialog(h, m, onDismiss = { picking = null }) { hh, mm ->
+            if (i < events.size) events[i] = events[i].copy(time = "%02d:%02d".format(hh, mm))
+            picking = null
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeDialog(hour: Int, minute: Int, onDismiss: () -> Unit, onPick: (Int, Int) -> Unit) {
+    val state = androidx.compose.material3.rememberTimePickerState(hour, minute, is24Hour = true)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        text = { androidx.compose.material3.TimePicker(state = state) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onPick(state.hour, state.minute) }) { Text(tr("決定", "OK")) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(tr("キャンセル", "Cancel")) } },
+    )
 }

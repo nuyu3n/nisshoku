@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 
 // The engine's data, as its commands give it (crates/nisshoku-engine; the
@@ -77,6 +78,113 @@ data class Note(
 @Serializable
 data class LinkedNote(val id: String, val title: String = "")
 
+@Serializable
+data class Revision(val id: String, val time: Long = 0)
+
+@Serializable
+data class RevisionContent(val title: String = "", val body: String = "")
+
+@Serializable
+data class Comment(
+    val id: String,
+    val quote: String = "",
+    val before: String = "",
+    val text: String = "",
+    val createdTime: Long = 0,
+    val updatedTime: Long = 0,
+    val resolved: Boolean = false,
+)
+
+@Serializable
+data class DiaryEvent(val time: String = "", val text: String = "")
+
+@Serializable
+data class WorkMeta(
+    val logline: String = "",
+    val synopsis: String = "",
+    val genre: String = "",
+    val targetChars: Long? = null,
+    val deadline: String? = null,
+)
+
+@Serializable
+data class ChapterInfo(
+    val id: String,
+    val title: String = "",
+    val excerpt: String = "",
+    val charCount: Int = 0,
+    val updatedTime: Long = 0,
+    val status: String = "",
+    val synopsis: String = "",
+    val pov: String? = null,
+)
+
+@Serializable
+data class WorkSection(val folderId: String, val title: String = "", val depth: Int = 0, val chapters: List<ChapterInfo> = emptyList())
+
+@Serializable
+data class CharacterInfo(
+    val id: String,
+    val name: String = "",
+    val ruby: String = "",
+    val role: String = "",
+    val color: String = "",
+    val aliases: List<String> = emptyList(),
+    val excerpt: String = "",
+    val mentions: Int = 0,
+    val chapters: List<String> = emptyList(),
+)
+
+@Serializable
+data class WorkOverview(
+    val id: String,
+    val title: String = "",
+    val meta: WorkMeta = WorkMeta(),
+    val sections: List<WorkSection> = emptyList(),
+    val characters: List<CharacterInfo> = emptyList(),
+    val plotId: String? = null,
+    val materials: List<NoteSummary> = emptyList(),
+    val totalChars: Long = 0,
+    val chapterCount: Int = 0,
+)
+
+@Serializable
+data class Relation(val target: String = "", val label: String = "")
+
+@Serializable
+data class Character(
+    val ruby: String = "",
+    val role: String = "",
+    val age: String = "",
+    val gender: String = "",
+    val appearance: String = "",
+    val personality: String = "",
+    val background: String = "",
+    val motivation: String = "",
+    val aliases: List<String> = emptyList(),
+    val color: String = "",
+    val relations: List<Relation> = emptyList(),
+)
+
+@Serializable
+data class PlotColumn(val id: String, val title: String = "")
+
+@Serializable
+data class PlotCard(
+    val id: String,
+    val column: String = "",
+    val title: String = "",
+    val text: String = "",
+    val chapter: String? = null,
+    val done: Boolean = false,
+)
+
+@Serializable
+data class Plot(val template: String = "", val columns: List<PlotColumn> = emptyList(), val cards: List<PlotCard> = emptyList())
+
+@Serializable
+data class PlotDoc(val noteId: String, val plot: Plot = Plot())
+
 /** Writing figures: today's characters, the streak, the last 30 days (`[date, chars]`). */
 @Serializable
 data class Stats(
@@ -106,7 +214,11 @@ data class DiaryEntry(
     val charCount: Int = 0,
     val mood: String? = null,
     val weather: String? = null,
+    val events: List<DiaryEvent> = emptyList(),
 )
+
+@Serializable
+data class ResourceFile(val id: String, val path: String = "", val mime: String = "", val title: String = "", val size: Long = 0)
 
 @Serializable
 data class StorageInfo(
@@ -271,6 +383,50 @@ object Api {
     suspend fun diaryStats(today: String): DiaryStats = get("diary_stats", "today" to today)
     suspend fun onThisDay(date: String): List<DiaryEntry> = get("on_this_day", "date" to date)
     suspend fun diaryEntries(query: String? = null): List<DiaryEntry> = get("diary_entries", "query" to query)
+    suspend fun setDiaryEvents(noteId: String, events: List<DiaryEvent>) =
+        Nisshoku.call("set_diary_events", args("noteId" to noteId, "events" to Nisshoku.json.encodeToJsonElement(events)))
+
+    suspend fun revisions(noteId: String): List<Revision> = get("list_revisions", "noteId" to noteId)
+    suspend fun revisionContent(noteId: String, revisionId: String): RevisionContent =
+        get("revision_content", "noteId" to noteId, "revisionId" to revisionId)
+
+    suspend fun restoreRevision(noteId: String, revisionId: String): Note = get("restore_revision", "noteId" to noteId, "revisionId" to revisionId)
+    suspend fun saveSnapshot(noteId: String): Boolean = get("save_snapshot", "noteId" to noteId)
+
+    suspend fun comments(noteId: String): List<Comment> = get("list_comments", "noteId" to noteId)
+    suspend fun addComment(noteId: String, quote: String, before: String, text: String): Comment =
+        get("add_comment", "noteId" to noteId, "quote" to quote, "before" to before, "text" to text)
+
+    suspend fun updateComment(noteId: String, commentId: String, text: String?, resolved: Boolean?) =
+        Nisshoku.call("update_comment", args("noteId" to noteId, "commentId" to commentId, "text" to text, "resolved" to resolved))
+
+    suspend fun deleteComment(noteId: String, commentId: String) = Nisshoku.call("delete_comment", args("noteId" to noteId, "commentId" to commentId))
+
+    suspend fun setWork(folderId: String, meta: WorkMeta?) =
+        Nisshoku.call("set_work", args("folderId" to folderId, "meta" to meta?.let { Nisshoku.json.encodeToJsonElement(it) }))
+
+    suspend fun workOverview(workId: String): WorkOverview = get("work_overview", "workId" to workId)
+    suspend fun setNoteKind(noteId: String, kind: String?) = Nisshoku.call("set_note_kind", args("noteId" to noteId, "kind" to kind))
+    suspend fun setChapterMeta(noteId: String, status: String, synopsis: String, pov: String?) =
+        Nisshoku.call("set_chapter_meta", args("noteId" to noteId, "meta" to buildJsonObject {
+            put("status", status); put("synopsis", synopsis); put("pov", pov)
+        }))
+
+    suspend fun createWorkNote(workId: String, kind: String, title: String): Note =
+        get("create_work_note", "workId" to workId, "kind" to kind, "title" to title)
+
+    suspend fun character(noteId: String): Character = get("get_character", "noteId" to noteId)
+    suspend fun setCharacter(noteId: String, character: Character) =
+        Nisshoku.call("set_character", args("noteId" to noteId, "character" to Nisshoku.json.encodeToJsonElement(character)))
+
+    suspend fun openPlot(workId: String, template: String?): PlotDoc = get("open_plot", "workId" to workId, "template" to template)
+    suspend fun setPlot(noteId: String, plot: Plot) =
+        Nisshoku.call("set_plot", args("noteId" to noteId, "plot" to Nisshoku.json.encodeToJsonElement(plot)))
+
+    suspend fun saveResource(data: ByteArray, name: String, mime: String): ResourceFile =
+        Nisshoku.json.decodeFromString(Nisshoku.saveResource(data, name, mime))
+
+    suspend fun resourceFiles(): List<ResourceFile> = get("resource_files")
     suspend fun storageInfo(): StorageInfo = get("storage_info")
     suspend fun deleteUnusedResources(): Int = get("delete_unused_resources")
     suspend fun diaryMonth(month: String): List<DiaryDay> = get("diary_month", "month" to month)

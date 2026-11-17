@@ -75,6 +75,9 @@ object Nisshoku {
     /** The profile: the app's data directory, as the Tauri build had it. */
     fun profileDir(context: Context): File = context.dataDir
 
+    /** The application's context (for what needs one outside of a screen, like formatting dates). */
+    val context: Context get() = appContext
+
     fun setUp(context: Context) {
         appContext = context.applicationContext
     }

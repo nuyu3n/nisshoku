@@ -4,5 +4,4 @@ local.properties
 keystore.properties
 # Built by the app's Gradle tasks (cargo ndk, the web editor).
 app/src/main/jniLibs/
-app/src/main/assets/web/
 app/src/main/assets/CHANGELOG.md

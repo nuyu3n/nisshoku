@@ -177,6 +177,7 @@ class MainActivity : ComponentActivity() {
                     onOpen = open,
                     onSearch = { nav.navigate("search") },
                     onSettings = { nav.navigate("settings") },
+                    onWork = { nav.navigate("work/$it") },
                 )
             }
             composable(
@@ -188,6 +189,9 @@ class MainActivity : ComponentActivity() {
                     model.editorClosed()
                     if (nav.currentBackStackEntry?.destination?.route == "note/{id}") nav.popBackStack()
                 })
+            }
+            composable("work/{id}") { entry ->
+                app.nisshoku.android.ui.WorkScreen(entry.arguments?.getString("id").orEmpty(), model, onOpen = open, onBack = { nav.popBackStack() })
             }
             composable("search") {
                 SearchScreen(onBack = { nav.popBackStack() }, onOpen = open)

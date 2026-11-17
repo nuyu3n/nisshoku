@@ -64,6 +64,8 @@ import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Language
@@ -167,6 +169,7 @@ fun HomeScreen(
     onOpen: (String) -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
+    onWork: (String) -> Unit = {},
 ) {
     val state by model.home.collectAsState()
     val sync by model.sync.collectAsState()
@@ -345,8 +348,11 @@ fun HomeScreen(
                             Spacer(Modifier.height(8.dp))
                             DiaryHeader(state.version, onOpen)
                         })
-                        state.scope is Scope.InFolder && state.folders.any { it.parentId == (state.scope as Scope.InFolder).id } -> ({
-                            SubNotebooks(state.folders.filter { it.parentId == (state.scope as Scope.InFolder).id }) { model.setScope(Scope.InFolder(it.id)) }
+                        state.scope is Scope.InFolder -> ({
+                            val id = (state.scope as Scope.InFolder).id
+                            workOf(state.folders, id)?.let { w -> WorkCard(w.title) { onWork(w.id) } }
+                            val children = state.folders.filter { it.parentId == id }
+                            if (children.isNotEmpty()) SubNotebooks(children) { model.setScope(Scope.InFolder(it.id)) }
                         })
                         else -> null
                     },
@@ -501,6 +507,17 @@ fun HomeScreen(
             },
             onDelete = edit.id?.let { id -> { model.trashFolder(id); folderEdit = null } },
             onMove = edit.id?.let { id -> { folderEdit = null; folderMove = state.folders.find { it.id == id } } },
+            isWork = state.folders.find { it.id == edit.id }?.isWork,
+            onWork = edit.id?.let { id ->
+                { on: Boolean ->
+                    folderEdit = null
+                    scope.launch {
+                        runCatching { makeWork(id, on) }.onFailure { model.say(it.message ?: "") }
+                        model.reload()
+                        if (on) onWork(id)
+                    }
+                }
+            },
             onNewSub = edit.id?.let { id -> { folderEdit = null; subOf = id } },
         )
     }
@@ -566,10 +583,11 @@ private fun NoteList(
     header: (@Composable () -> Unit)?,
 ) {
     val list = rememberLazyListState()
-    if (state.notes.isEmpty() && header == null) {
+    if (state.notes.isEmpty() && state.scope != Scope.Diary) {
         AnimatedVisibility(!state.loading, enter = fadeIn(), exit = fadeOut()) {
             // Scrollable, so that pulling still syncs.
-            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+                header?.let { Column(Modifier.padding(top = 4.dp)) { it() } }
                 when (state.scope) {
                     Scope.Trash -> EmptyState(Icons.Outlined.Delete, tr("ゴミ箱は空です", "The trash is empty"), tr("削除したノートはここに入ります", "Deleted notes come here"))
                     Scope.Todo -> EmptyState(Icons.Outlined.TaskAlt, tr("タスクはありません", "No tasks"), tr("＋ からタスクを追加できます", "Add one with +"))
@@ -953,6 +971,8 @@ private fun FolderDialog(
     onDelete: (() -> Unit)?,
     onMove: (() -> Unit)? = null,
     onNewSub: (() -> Unit)? = null,
+    isWork: Boolean? = null,
+    onWork: ((Boolean) -> Unit)? = null,
 ) {
     var title by remember { mutableStateOf(edit.title) }
     var icon by remember { mutableStateOf(edit.icon) }
@@ -983,6 +1003,13 @@ private fun FolderDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         onNewSub?.let { AssistChip(onClick = it, label = { Text(tr("サブノートブック", "Sub-notebook")) }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null, Modifier.size(18.dp)) }) }
                         onMove?.let { AssistChip(onClick = it, label = { Text(tr("移動", "Move")) }, leadingIcon = { Icon(Icons.Outlined.DriveFileMove, null, Modifier.size(18.dp)) }) }
+                    }
+                    if (onWork != null && isWork != null) {
+                        AssistChip(
+                            onClick = { onWork(!isWork) },
+                            label = { Text(if (isWork) tr("作品をやめる", "No longer a work") else tr("作品にする（小説など）", "Make it a work (a novel…)")) },
+                            leadingIcon = { Icon(Icons.Outlined.AutoStories, null, Modifier.size(18.dp)) },
+                        )
                     }
                 }
             }
@@ -1053,5 +1080,25 @@ private fun TagDialog(tag: app.nisshoku.android.engine.Tag, onDismiss: () -> Uni
             onDismiss = { confirm = false },
             onConfirm = onDelete,
         )
+    }
+}
+
+/** A work's notebook: the way to its overview (manuscript, characters, plot, materials). */
+@Composable
+private fun WorkCard(title: String, onOpen: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(24.dp)).clickable(onClick = onOpen),
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.AutoStories, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Text(tr("原稿・人物・プロット・資料", "Manuscript, characters, plot, materials"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+        }
     }
 }

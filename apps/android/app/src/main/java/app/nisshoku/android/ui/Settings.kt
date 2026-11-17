@@ -320,30 +320,6 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
             // -------------------------------------------------------- Editor
             item { SectionLabel(tr("エディタ", "Editor")) }
             item {
-                Block(0, 1) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.EditNote, null)
-                        Spacer(Modifier.width(16.dp))
-                        Text(tr("ノートを開くエディタ", "Editor for notes"), style = MaterialTheme.typography.bodyLarge)
-                    }
-                    Choice(
-                        listOf("auto" to tr("自動", "Auto"), "native" to tr("シンプル", "Simple"), "rich" to tr("リッチ", "Formatted")),
-                        str("editorMode", "auto"),
-                        { model.setPref("editorMode", JsonPrimitive(it)) },
-                    )
-                    Text(
-                        when (str("editorMode", "auto")) {
-                            "native" -> tr("いつも Android 標準の入力欄で書きます。日本語入力がいちばん安定します。数式や表は記号のまま表示されます。", "Always the native text field: the most reliable with the keyboard. Math and tables show as their source.")
-                            "rich" -> tr("いつも整形表示のエディタで開きます（数式・表・画像をそのまま表示）。", "Always the formatted editor (math, tables and images as they look).")
-                            else -> tr("文章だけのノートはシンプルエディタで、数式・表・画像のあるノートはリッチ表示で開きます。", "Notes of plain text open in the simple editor; those with math, tables or images in the formatted one.")
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(5.dp)) }
-            item {
                 Block(0, 3) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.TextFields, null)

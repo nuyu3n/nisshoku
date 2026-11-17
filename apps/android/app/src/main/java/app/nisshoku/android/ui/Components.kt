@@ -74,7 +74,7 @@ fun dueText(ms: Long, allDay: Boolean): String {
         0L -> trNow("今日", "Today")
         1L -> trNow("明日", "Tomorrow")
         -1L -> trNow("昨日", "Yesterday")
-        else -> DateUtils.formatDateTime(null, ms, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH)
+        else -> DateUtils.formatDateTime(app.nisshoku.android.engine.Nisshoku.context, ms, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH)
     }
     return if (allDay) day else "$day ${"%02d:%02d".format(date.hour, date.minute)}"
 }

@@ -17,19 +17,7 @@ import "katex/dist/katex.min.css";
 import "./styles/mobile.css";
 
 const root = createRoot(document.getElementById("root")!);
-const query = new URLSearchParams(window.location.search);
-if (query.get("embed") === "editor") {
-  // The editor alone, in the native Android app (components/Embedded.tsx).
-  void import("./components/Embedded").then(({ EmbeddedEditor }) =>
-    root.render(
-      <StrictMode>
-        <ErrorBoundary kind="app" className="app">
-          <EmbeddedEditor noteId={query.get("id") ?? ""} />
-        </ErrorBoundary>
-      </StrictMode>,
-    ),
-  );
-} else if (!isTauri && new URLSearchParams(window.location.search).has("selftest")) {
+if (!isTauri && new URLSearchParams(window.location.search).has("selftest")) {
   hideSplash();
   void import("./dev/selftest").then(({ SelfTest }) => root.render(<SelfTest />));
 } else {

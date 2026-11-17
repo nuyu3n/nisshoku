@@ -3,6 +3,9 @@ package app.nisshoku.android.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -43,6 +46,12 @@ import androidx.compose.material.icons.outlined.FormatListNumbered
 import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.KeyboardHide
 import androidx.compose.material.icons.outlined.Title
+import androidx.compose.material.icons.outlined.TextRotateVertical
+import androidx.compose.material.icons.outlined.Toc
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Spellcheck
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.PushPin
@@ -107,21 +116,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.abs
 
-// The app's own editor: the note's Markdown in a native text field, so that
-// the keyboard (Gboard's Japanese input, its composition, its gestures)
-// talks to Android's text input directly, with no web page in between.
-// Markdown is styled as it is typed (headings, emphasis, lists, check
-// boxes), and stays what is stored. What needs the formatted view (math,
-// tables, images) opens in the web editor (Editor.kt), one tap away.
-
-/** Whether a note is better shown in the formatted (web) editor: it has math, a table, an image, an attachment or HTML. */
-fun needsRichEditor(body: String): Boolean =
-    body.contains("$$") ||
-        Regex("""\$[^\s$][^$\n]*\$""").containsMatchIn(body) ||
-        body.contains("![") ||
-        body.contains("](:/") ||
-        Regex("""(?m)^\s*\|.*\|\s*$""").containsMatchIn(body) ||
-        Regex("""<[a-zA-Z][^>\n]*>""").containsMatchIn(body)
+// The app's editor: the note's Markdown in a native text field, so that the
+// keyboard (Gboard's Japanese input, its composition, its gestures) talks to
+// Android's text input directly, with no web page in between. Markdown is
+// styled as it is typed (headings, emphasis, lists, check boxes, tables and
+// math in a fixed-width face) and stays what is stored; pictures show above
+// the text.
 
 // ---------------------------------------------------------------------------
 // Markdown, as typed
@@ -182,6 +182,19 @@ private fun TextFieldBuffer.styleLine(line: CharSequence, at: Int, c: MarkdownCo
     if (rule.matches(line)) {
         addStyle(dim, at, end)
         return
+    }
+    // A table row, or a block of math: in a fixed-width face, so that they line up.
+    val trimmed = line.trimStart()
+    if (trimmed.startsWith("|") || trimmed.startsWith("$$")) {
+        addStyle(SpanStyle(fontFamily = FontFamily.Monospace, fontSize = 0.88.em, color = c.quote), at, end)
+        return
+    }
+    // Images and attachments: their links dimmed (the pictures show above the text).
+    for (m in Regex("""!?\[[^\]\n]*]\(:/[0-9a-f]{32}\)""").findAll(line)) {
+        addStyle(SpanStyle(color = c.accent, fontSize = 0.85.em), at + m.range.first, at + m.range.last + 1)
+    }
+    for (m in Regex("""(?<!\$)\$[^\s$][^$\n]*\$(?!\$)""").findAll(line)) {
+        addStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = c.accent, fontSize = 0.9.em), at + m.range.first, at + m.range.last + 1)
     }
     if (line.trimStart().startsWith(">")) {
         addStyle(SpanStyle(color = c.quote, fontStyle = FontStyle.Italic), at, end)
@@ -355,7 +368,15 @@ private const val LINE_BREAK = '\n'
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onRich: () -> Unit, onOther: (String) -> Unit = {}) {
+fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onOther: (String) -> Unit = {}) {
+    var noteKind by remember { mutableStateOf<String?>(null) }
+    var parentId by remember { mutableStateOf("") }
+    var conflict by remember { mutableStateOf(false) }
+    /** The tool open: outline, comments, proof, history, preview. */
+    var tool by remember { mutableStateOf<String?>(null) }
+    var images by remember { mutableStateOf<Map<String, app.nisshoku.android.engine.ResourceFile>>(emptyMap()) }
+    /** The words last selected, and the text then (a tap on the menu may clear the selection before a comment). */
+    var lastSelection by remember { mutableStateOf<Pair<IntRange, String>?>(null) }
     var diaryDate by remember { mutableStateOf<String?>(null) }
     var pinned by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -420,6 +441,26 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
     }
 
     val titleFocus = remember { FocusRequester() }
+    // A picture from the gallery becomes an attachment, put in at the cursor.
+    val context0 = androidx.compose.ui.platform.LocalContext.current
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val r = runCatching {
+                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { context0.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
+                val mime = context0.contentResolver.getType(uri) ?: "image/jpeg"
+                Api.saveResource(bytes, "image." + (android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "jpg"), mime)
+            }.onFailure { model.say(it.message ?: "") }.getOrNull() ?: return@launch
+            images = images + (r.id to r)
+            body.edit {
+                val at = selection.max
+                val before = if (at > 0 && asCharSequence()[at - 1] != '\n') "\n" else ""
+                val text = "$before![${r.title.ifBlank { "image" }}](:/${r.id})\n"
+                replace(at, at, text)
+                selection = TextRange(at + text.length)
+            }
+        }
+    }
     var startAtTitle by remember { mutableStateOf(false) }
     LaunchedEffect(noteId) {
         val note = try {
@@ -442,6 +483,10 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
         readOnly = note.deletedTime > 0
         pinned = note.pinned
         diaryDate = note.diaryDate
+        noteKind = note.kind
+        parentId = note.parentId
+        conflict = note.isConflict
+        images = runCatching { Api.resourceFiles() }.getOrDefault(emptyList()).associateBy { it.id }
         startAtTitle = note.title.isEmpty() && note.body.isEmpty() && !readOnly
         loaded = true
     }
@@ -454,6 +499,13 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
         }
     }
 
+    LaunchedEffect(loaded) {
+        if (!loaded) return@LaunchedEffect
+        snapshotFlow { body.selection to body.text.toString() }.collect { (sel, text) ->
+            if (!sel.collapsed) lastSelection = (sel.min until sel.max) to text
+            else if (lastSelection?.second != text) lastSelection = null
+        }
+    }
     // Saved a moment after the last keystroke, when the app leaves the
     // screen, and on the way out.
     LaunchedEffect(loaded) {
@@ -530,13 +582,33 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                 IconButton(onClick = { leave { close() } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, tr("戻る", "Back")) }
             },
             actions = {
-                // Math, tables, images, the diary's mood: the formatted view.
-                IconButton(onClick = { leave(onRich) }) {
-                    Icon(Icons.AutoMirrored.Outlined.Article, tr("リッチ表示で開く", "Open the formatted view"))
+                if (loaded) IconButton(onClick = { keyboard?.hide(); tool = "preview" }) {
+                    Icon(Icons.Outlined.TextRotateVertical, tr("縦書きプレビュー", "Vertical preview"))
                 }
                 if (loaded && !readOnly) Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, tr("その他", "More")) }
                     androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("見出し", "Outline")) },
+                            leadingIcon = { Icon(Icons.Outlined.Toc, null) },
+                            onClick = { menu = false; tool = "outline" },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("コメント", "Comments")) },
+                            leadingIcon = { Icon(Icons.Outlined.ChatBubbleOutline, null) },
+                            onClick = { menu = false; tool = "comments" },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("文章チェック", "Writing check")) },
+                            leadingIcon = { Icon(Icons.Outlined.Spellcheck, null) },
+                            onClick = { menu = false; tool = "proof" },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(tr("履歴", "History")) },
+                            leadingIcon = { Icon(Icons.Outlined.History, null) },
+                            onClick = { menu = false; scope.launch { save(); tool = "history" } },
+                        )
+                        androidx.compose.material3.HorizontalDivider()
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(tr("タグ", "Tags")) },
                             leadingIcon = { Icon(Icons.Outlined.Tag, null) },
@@ -578,6 +650,12 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                 LoadingIndicator(Modifier.align(Alignment.Center))
             } else {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+                    if (conflict) {
+                        ConflictBanner(
+                            onKeepCopy = { scope.launch { save(); model.resolveConflict(noteId, "copy")?.let { onOther(it) } ?: close() } },
+                            onKeepOriginal = { scope.launch { model.resolveConflict(noteId, "original")?.let { onOther(it) } ?: close() } },
+                        )
+                    }
                     diaryDate?.let { date ->
                         DiaryMetaBar(noteId, date) { day ->
                             leave {
@@ -604,6 +682,11 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
                         },
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp).focusRequester(titleFocus),
                     )
+                    // A work's chapter or character: its sheet above the text.
+                    val work = remember(parentId, model.home.collectAsState().value.folders) { workOf(model.home.value.folders, parentId) }
+                    if (work != null && noteKind == null) ChapterBar(noteId, work.id)
+                    if (noteKind == "character") CharacterFields(noteId)
+                    AttachmentStrip(body.text.toString(), images)
                     BasicTextField(
                         state = body,
                         readOnly = readOnly,
@@ -654,6 +737,33 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
             FormatBar(
                 body = body,
                 onHideKeyboard = { keyboard?.hide() },
+                onImage = { picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            )
+        }
+        fun show(r: IntRange) {
+            val end = minOf(r.last + 1, body.text.length)
+            body.edit { selection = TextRange(minOf(r.first, end), end) }
+            runCatching { bodyFocus.requestFocus() }
+        }
+        when (tool) {
+            "outline" -> OutlineSheet(body.text.toString(), onDismiss = { tool = null }) { at -> tool = null; show(at until at) }
+            "comments" -> CommentsSheet(
+                noteId,
+                body.text.toString(),
+                body.selection.takeIf { !it.collapsed }?.let { it.min until it.max }
+                    ?: lastSelection?.takeIf { it.second == body.text.toString() }?.first,
+                onDismiss = { tool = null },
+                onShow = { show(it) },
+            )
+            "proof" -> ProofSheet(body.text.toString(), onDismiss = { tool = null }) { show(it) }
+            "history" -> HistorySheet(noteId, onDismiss = { tool = null }, onRestored = { scope.launch { reload() } })
+            "preview" -> GenkoPreview(
+                title.text.toString(),
+                body.text.toString(),
+                model.prefInt("manuscriptCols", 20).coerceIn(10, 40),
+                model.prefInt("manuscriptRows", 20).coerceIn(5, 40),
+                model.prefString("genkoInk", "accent"),
+                onDismiss = { tool = null },
             )
         }
     }
@@ -661,7 +771,7 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onR
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit) {
+private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit, onImage: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -688,6 +798,7 @@ private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit) {
             button(Icons.Outlined.FormatBold, tr("太字", "Bold")) { body.wrap("**") }
             button(Icons.Outlined.FormatItalic, tr("斜体", "Italic")) { body.wrap("*") }
             button(Icons.Outlined.FormatQuote, tr("引用", "Quote")) { body.toggleLinePrefix("> ") }
+            button(Icons.Outlined.Image, tr("画像を挿入", "Insert a picture")) { onImage() }
             button(Icons.Outlined.KeyboardHide, tr("キーボードを閉じる", "Hide the keyboard")) { onHideKeyboard() }
         }
     }
@@ -708,4 +819,48 @@ private fun diaryPrompt(date: String): String {
     )
     val i = Math.floorMod(date.hashCode(), ja.size)
     return tr(ja[i], en[i])
+}
+
+/** The pictures and files the note has, as thumbnails above its text (a tap opens one). */
+@Composable
+private fun AttachmentStrip(body: String, files: Map<String, app.nisshoku.android.engine.ResourceFile>) {
+    val ids = remember(body) { Regex(""":/([0-9a-f]{32})""").findAll(body).map { it.groupValues[1] }.distinct().toList() }
+    val shown = ids.mapNotNull { files[it] }
+    if (shown.isEmpty()) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+        for (f in shown) {
+            val open = {
+                runCatching {
+                    val file = java.io.File(f.path)
+                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, f.mime).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                }
+            }
+            if (f.mime.startsWith("image/")) {
+                val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, f.path) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            android.graphics.BitmapFactory.decodeFile(f.path, o)
+                            var sample = 1
+                            while (o.outHeight / sample > 480) sample *= 2
+                            android.graphics.BitmapFactory.decodeFile(f.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+                        }.getOrNull()
+                    }
+                }
+                Box(
+                    Modifier.size(140.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .clickable { open() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    bitmap?.let { androidx.compose.foundation.Image(it, f.title, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+                        ?: Text(tr("同期待ち", "Not synced yet"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                }
+            } else {
+                androidx.compose.material3.AssistChip(onClick = { open() }, label = { Text(f.title.ifBlank { tr("添付ファイル", "Attachment") }, maxLines = 1) })
+            }
+        }
+    }
 }

@@ -115,37 +115,18 @@ val uniffiBindings = tasks.register<Exec>("uniffiBindings") {
 }
 
 // -------------------------------------------------------------------------
-// The editor: the web app's (apps/desktop), shown alone (`?embed=editor`).
+// The release notes, from the web app's CHANGELOG.md (one for all builds).
 
 val webDir = repoRoot.resolve("apps/desktop")
 
-val webBuild = tasks.register<Exec>("webBuild") {
-    group = "nisshoku"
-    description = "Builds the web editor"
-    workingDir = webDir
-    val windows = System.getProperty("os.name").lowercase().contains("windows")
-    commandLine(if (windows) listOf("cmd", "/c", "pnpm", "build") else listOf("pnpm", "build"))
-    inputs.dir(webDir.resolve("src"))
-    inputs.file(webDir.resolve("index.html"))
-    outputs.dir(webDir.resolve("dist"))
-    onlyIf { findProperty("nisshoku.skipWeb") == null }
-}
-
-val webAssets = tasks.register<Sync>("webAssets") {
-    group = "nisshoku"
-    dependsOn(webBuild)
-    from(webDir.resolve("dist"))
-    into(file("src/main/assets/web"))
-}
-
-// The release notes, for "what's new" (ui/Releases.kt).
+// For "what's new" (ui/Releases.kt).
 val changelog = tasks.register<Copy>("changelog") {
     group = "nisshoku"
     from(webDir.resolve("CHANGELOG.md"))
     into(file("src/main/assets"))
 }
 
-tasks.named("preBuild") { dependsOn(uniffiBindings, webAssets, changelog) }
+tasks.named("preBuild") { dependsOn(uniffiBindings, changelog) }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
@@ -163,7 +144,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-process:2.11.0")
     implementation("androidx.navigation:navigation-compose:2.10.2")
-    implementation("androidx.webkit:webkit:1.18.0")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
