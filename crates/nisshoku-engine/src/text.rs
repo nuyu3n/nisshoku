@@ -94,7 +94,11 @@ fn inline_text(s: &str) -> String {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
+        // (`snake_case` and "10~20" are text, not emphasis or strike-through.)
+        let word = |c: Option<&char>| c.is_some_and(|c| c.is_alphanumeric());
         match c {
+            '_' if i > 0 && word(chars.get(i - 1)) && word(chars.get(i + 1)) => out.push(c),
+            '~' if chars.get(i + 1) != Some(&'~') && (i == 0 || chars[i - 1] != '~') => out.push(c),
             '*' | '_' | '`' | '~' | '|' | '｜' | '《' | '》' => {}
             '\\' if i + 1 < chars.len() => {
                 out.push(chars[i + 1]);
@@ -170,6 +174,38 @@ pub fn note_excerpt(title: &str, markdown: &str, max_chars: usize) -> String {
         }
     }
     excerpt(&strip_math(&strip_ruby(body)), max_chars)
+}
+
+/// For a search result: the text around the first word of `query` found
+/// (folded as [`search_fold`]), or the start when only the title matched.
+pub fn search_excerpt(title: &str, markdown: &str, query: &str, max_chars: usize) -> String {
+    let full = note_excerpt(title, markdown, usize::MAX);
+    let chars: Vec<char> = full.chars().collect();
+    // The folded text, with where each of its characters came from.
+    let mut folded = String::new();
+    let mut origin = Vec::new();
+    for (i, c) in chars.iter().enumerate() {
+        for f in search_fold(&c.to_string()).chars() {
+            folded.push(f);
+            origin.push(i);
+        }
+    }
+    let folded: Vec<char> = folded.chars().collect();
+    let found = search_fold(query).split_whitespace().find_map(|word| {
+        let word: Vec<char> = word.chars().collect();
+        (0..folded.len().saturating_sub(word.len() - 1)).find(|&i| folded[i..].starts_with(&word))
+    });
+    let start = match found {
+        // A little of what comes before, for context.
+        Some(at) if origin[at] > 12 => origin[at] - 12,
+        _ => return note_excerpt(title, markdown, max_chars),
+    };
+    let mut out: String = "…".to_string();
+    out.extend(chars[start..].iter().take(max_chars));
+    if chars.len() - start > max_chars {
+        out.push('…');
+    }
+    out
 }
 
 /// TeX (`$…$`, `$$…$$`) shown as a mark in excerpts: its source reads as noise.
@@ -249,5 +285,10 @@ mod tests {
             "祖父は灯台守"
         );
         assert_eq!(note_excerpt("", "二人《ふたり》 | 《未完》", 20), "二人");
+        let long = format!("{}見つけたい言葉のあと", "前置き".repeat(20));
+        let found = search_excerpt("", &long, "ツケタイ", 20);
+        assert!(found.starts_with('…') && found.contains("見つけたい") && found.ends_with('…'), "{found}");
+        assert_eq!(search_excerpt("", "短い本文", "本文", 12), "短い本文");
+        assert_eq!(excerpt("edited_on_pc _em_ 10~20 ~~old~~", 40), "edited_on_pc em 10~20 old");
     }
 }

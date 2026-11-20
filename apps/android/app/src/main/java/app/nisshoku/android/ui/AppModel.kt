@@ -51,6 +51,8 @@ data class HomeState(
     val scope: Scope = Scope.All,
     val notes: List<NoteSummary> = emptyList(),
     val loading: Boolean = true,
+    /** Conflict copies waiting to be looked at (the drawer shows them only then). */
+    val conflicts: Int = 0,
 )
 
 /** The app's state over the engine, for all screens. */
@@ -94,10 +96,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     val version: String = BuildConfig.VERSION_NAME.removeSuffix("-dev")
 
-    /** Notes were written since the last sync (sent in the background on leaving). */
-    private var unsent = false
+    /** The app came to the front or left it (the whole app, not one screen: it outlives them). */
+    private val lifecycle = object : androidx.lifecycle.DefaultLifecycleObserver {
+        override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = setForeground(true)
+        override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = setForeground(false)
+    }
 
     init {
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycle)
         viewModelScope.launch { start() }
         viewModelScope.launch {
             Nisshoku.events.collect { e ->
@@ -112,6 +118,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch { Nisshoku.widgetActions.collect { applyWidgetActions() } }
+    }
+
+    override fun onCleared() {
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycle)
+        super.onCleared()
     }
 
     private suspend fun start() {
@@ -138,7 +149,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val before = _sync.value.status
         _sync.update { it.copy(status = status) }
         if (status.state == "syncing" && before.state != "syncing") SyncService.start(getApplication())
-        if (status.state == "idle" && status.lastSync != before.lastSync) unsent = false
         if (status.state == "error" && before.state != "error" && !status.message.isNullOrEmpty()) say(status.message)
     }
 
@@ -197,7 +207,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private suspend fun applyWidgetActions() {
         val changed = runCatching { Api.applyWidgetActions() }.getOrDefault(0)
         if (changed > 0) {
-            unsent = true
             reload()
         }
     }
@@ -262,10 +271,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 val scope = _home.value.scope
                 val folders = Api.folders()
                 val tags = Api.tags()
+                val conflicts = runCatching { Api.notes(Scope.Conflicts).size }.getOrDefault(0)
                 val notes = sortNotes(Api.notes(scope), scope, prefString("sortNotes", "updated"))
                 runCatching { Api.stats() }.getOrNull()?.let { _stats.value = it }
                 if (scope == _home.value.scope) {
-                    _home.update { it.copy(folders = folders, tags = tags, notes = notes, loading = false, version = it.version + 1) }
+                    _home.update { it.copy(folders = folders, tags = tags, notes = notes, loading = false, conflicts = conflicts, version = it.version + 1) }
                 }
                 refreshWidgets()
             } catch (e: Exception) {
@@ -279,7 +289,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A new note in the notebook shown (or the default one); its id. */
     suspend fun newNote(title: String? = null, body: String? = null): String? = try {
         val folder = (_home.value.scope as? Scope.InFolder)?.id
-        Api.createNote(folder, title, body).id.also { unsent = true; reload() }
+        Api.createNote(folder, title, body).id.also { reload() }
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
@@ -287,7 +297,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun newTask(title: String, due: Long?, allDay: Boolean): Boolean = try {
         Api.createTask(title, (_home.value.scope as? Scope.InFolder)?.id, due, allDay)
-        unsent = true
         reload()
         true
     } catch (e: Exception) {
@@ -313,7 +322,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 Api.trashNote(note.id)
-                unsent = true
                 _home.update { s -> s.copy(notes = s.notes.filter { it.id != note.id }) }
                 say(trNow("ゴミ箱に移動しました", "Moved to the trash"), trNow("元に戻す", "Undo")) {
                     Api.restoreNote(note.id)
@@ -361,7 +369,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** A copy of the note; its id. */
     suspend fun duplicate(id: String): String? = try {
-        Api.duplicateNote(id).id.also { unsent = true; reload() }
+        Api.duplicateNote(id).id.also { reload() }
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
@@ -388,7 +396,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A web page saved as a note; its id. */
     suspend fun clip(url: String): String? = try {
         say(trNow("ページを取り込んでいます…", "Fetching the page…"))
-        Api.clipUrl(url.trim(), (_home.value.scope as? Scope.InFolder)?.id).id.also { unsent = true; reload() }
+        Api.clipUrl(url.trim(), (_home.value.scope as? Scope.InFolder)?.id).id.also { reload() }
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
@@ -396,7 +404,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** Keeps one side of a conflict; the id of the note kept. */
     suspend fun resolveConflict(id: String, keep: String): String? = try {
-        Api.resolveConflict(id, keep).also { unsent = true; reload() }
+        Api.resolveConflict(id, keep).also { reload() }
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         say(e.message ?: ""); null
@@ -415,7 +423,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 block()
-                unsent = true
                 reload()
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -426,10 +433,20 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The editor closed: what it wrote is sent by the next sync. */
     fun editorClosed() {
-        unsent = true
         reload()
-        // (The editor keeps preferences of its own: the last note, its panels.)
-        viewModelScope.launch { runCatching { loadPrefs() } }
+        viewModelScope.launch {
+            runCatching {
+                // Closed on purpose: the next start shows the list, not this
+                // note again ("open the last note" is for coming back to one
+                // that was left open).
+                loadPrefs()
+                if (prefString("lastNoteId", "").isNotEmpty()) {
+                    val next = JsonObject(_prefs.value + ("lastNoteId" to JsonPrimitive("")))
+                    _prefs.value = next
+                    Api.setPreferences(next)
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -447,14 +464,26 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun refreshSyncSettings() {
-        runCatching { Api.syncSettings() }.getOrNull()?.let { _sync.value = it }
+        val settings = runCatching { Api.syncSettings() }.getOrNull() ?: return
+        val before = _sync.value.target.kind
+        _sync.value = settings
+        // Set up or disconnected: the background sync follows.
+        if ((before == "none") != (settings.target.kind == "none")) {
+            SyncWorker.schedule(getApplication(), if (settings.target.kind == "none") 0 else prefInt("backgroundSyncMinutes", 60))
+        }
     }
 
     /** The app came to the front or left it. */
     fun setForeground(visible: Boolean) {
         Nisshoku.scope.launch { runCatching { Api.setForeground(visible) } }
-        if (!visible && unsent && _sync.value.target.kind != "none" && !_sync.value.status.needsPassword) {
-            SyncWorker.runOnce(getApplication())
+        // Leaving with changes not sent yet (an edit just saved, a task ticked
+        // off): WorkManager sends them, as the app may not run again for long.
+        if (!visible && _sync.value.target.kind != "none" && !_sync.value.status.needsPassword) {
+            Nisshoku.scope.launch {
+                // (The editor saves as the screen stops: a moment for that.)
+                delay(300)
+                if (runCatching { Api.hasUnsentChanges() }.getOrDefault(true)) SyncWorker.runOnce(getApplication())
+            }
         }
         if (visible) {
             viewModelScope.launch {

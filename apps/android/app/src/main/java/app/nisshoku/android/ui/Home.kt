@@ -212,6 +212,9 @@ fun HomeScreen(
 
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(fabOpen) { fabOpen = false }
+    // Back from a notebook, the tasks, the diary…: to all notes first, as
+    // other apps' lists do, rather than out of the app.
+    BackHandler(!drawer.isOpen && !fabOpen && state.scope != Scope.All) { model.setScope(Scope.All) }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalTags provides state.tags, LocalListLook provides look) {
     ModalNavigationDrawer(
@@ -297,11 +300,18 @@ fun HomeScreen(
             },
             floatingActionButton = {
                 if (state.scope != Scope.Trash) {
+                    // In the tasks and the diary, + makes what is shown there at once.
+                    val direct = when (state.scope) {
+                        Scope.Todo -> ({ newTask = true })
+                        Scope.Diary -> ({ scope.launch { model.todaysDiary()?.let(onOpen) }; Unit })
+                        else -> null
+                    }
                     FabMenu(
                         open = fabOpen,
+                        icon = if (direct != null) Icons.Outlined.Add else Icons.Outlined.Edit,
                         onOpenChange = {
                             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            fabOpen = it
+                            if (it && direct != null) direct() else fabOpen = it
                         },
                         onNote = {
                             fabOpen = false
@@ -546,7 +556,7 @@ private fun SyncButton(state: String, configured: Boolean, onSync: () -> Unit, o
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun FabMenu(open: Boolean, onOpenChange: (Boolean) -> Unit, onNote: () -> Unit, onTask: () -> Unit, onDiary: () -> Unit) {
+private fun FabMenu(open: Boolean, icon: ImageVector, onOpenChange: (Boolean) -> Unit, onNote: () -> Unit, onTask: () -> Unit, onDiary: () -> Unit) {
     FloatingActionButtonMenu(
         expanded = open,
         button = {
@@ -555,9 +565,9 @@ private fun FabMenu(open: Boolean, onOpenChange: (Boolean) -> Unit, onNote: () -
                 onCheckedChange = onOpenChange,
                 modifier = Modifier.semantics { contentDescription = trNow("新規作成", "Create") },
             ) {
-                val icon by remember { derivedStateOf { if (checkedProgress > 0.5f) Icons.Outlined.Close else Icons.Outlined.Edit } }
+                val shown by remember(icon) { derivedStateOf { if (checkedProgress > 0.5f) Icons.Outlined.Close else icon } }
                 Icon(
-                    painter = rememberVectorPainter(icon),
+                    painter = rememberVectorPainter(shown),
                     contentDescription = null,
                     modifier = Modifier.animateIcon({ checkedProgress }).scale(1f),
                 )
@@ -787,19 +797,22 @@ private fun Drawer(
                 }
             }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-            DrawerItem(tr("競合", "Conflicts"), Icons.Outlined.WarningAmber, item(Scope.Conflicts)) { onScope(Scope.Conflicts) }
+            if (state.conflicts > 0 || item(Scope.Conflicts)) {
+                DrawerItem(tr("競合", "Conflicts"), Icons.Outlined.WarningAmber, item(Scope.Conflicts), badge = state.conflicts.takeIf { it > 0 }) { onScope(Scope.Conflicts) }
+            }
             DrawerItem(tr("ゴミ箱", "Trash"), Icons.Outlined.Delete, item(Scope.Trash)) { onScope(Scope.Trash) }
-            DrawerItem(tr("設定", "Settings"), Icons.Outlined.Settings, false, onSettings)
+            DrawerItem(tr("設定", "Settings"), Icons.Outlined.Settings, false, onClick = onSettings)
             Spacer(Modifier.height(24.dp).navigationBarsPadding())
         }
     }
 }
 
 @Composable
-private fun DrawerItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+private fun DrawerItem(label: String, icon: ImageVector, selected: Boolean, badge: Int? = null, onClick: () -> Unit) {
     NavigationDrawerItem(
         label = { Text(label) },
         icon = { Icon(icon, null) },
+        badge = badge?.let { { Text("$it", style = MaterialTheme.typography.labelMedium) } },
         selected = selected,
         onClick = onClick,
         modifier = Modifier.height(52.dp),

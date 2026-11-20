@@ -47,6 +47,8 @@ data class NoteSummary(
     val goal: Long? = null,
     val kind: String? = null,
     val tags: List<String> = emptyList(),
+    /** `save_note`: the note had changed elsewhere, and that version was kept as this copy. */
+    val conflictId: String? = null,
 )
 
 @Serializable
@@ -456,6 +458,7 @@ object Api {
 
     suspend fun syncSettings(): SyncSettings = get("get_sync_settings")
     suspend fun syncNow(): SyncStatus = get("sync_now")
+    suspend fun hasUnsentChanges(): Boolean = get("has_unsent_changes")
     suspend fun setForeground(visible: Boolean) = Nisshoku.call("set_foreground", args("visible" to visible))
     suspend fun disconnectSync() = Nisshoku.call("disconnect_sync")
     suspend fun nextcloudLoginStart(server: String): String = get("nextcloud_login_start", "server" to server)

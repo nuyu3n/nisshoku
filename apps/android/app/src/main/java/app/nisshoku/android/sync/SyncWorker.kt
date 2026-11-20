@@ -9,19 +9,20 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.Worker
+import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import app.nisshoku.android.engine.NativeInit
 import app.nisshoku.android.engine.Nisshoku
-import app.nisshoku.android.engine.backgroundSync
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.TimeUnit
 
 /**
  * Syncs in the background every so often, with the app closed too
- * (WorkManager; the interval is in the settings). The sync is the engine's,
- * run on its own over the profile (`background_sync`).
+ * (WorkManager; the interval is in the settings). The sync runs through the
+ * engine the process has open (`sync_unattended`), the app's own if it is
+ * running: one sync at a time, and the open screens hear what it changed.
  */
-class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     companion object {
         private const val NAME = "nisshoku-background-sync"
 
@@ -55,14 +56,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         }
     }
 
-    override fun doWork(): Result = try {
-        NativeInit.init(applicationContext)
-        when (backgroundSync(Nisshoku.profileDir(applicationContext).path)) {
+    override suspend fun doWork(): Result = try {
+        when (Nisshoku.call("sync_unattended").jsonPrimitive.intOrNull) {
             1 -> Result.retry()
             else -> Result.success()
         }
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         Log.w("SyncWorker", "background sync failed: $e")
-        Result.failure()
+        Result.retry()
     }
 }

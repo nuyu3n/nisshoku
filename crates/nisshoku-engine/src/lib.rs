@@ -155,7 +155,9 @@ pub fn make_state(dir: &Path) -> Result<AppState, Box<dyn std::error::Error>> {
         sync_lock: tokio::sync::Mutex::new(()),
         status: Mutex::new(status),
         nextcloud_flow: Mutex::new(None),
-        foreground: std::sync::atomic::AtomicBool::new(true),
+        // Phones: in the background until the app says it is in front (a
+        // process started for WorkManager has no screen; see `sync::run`).
+        foreground: std::sync::atomic::AtomicBool::new(!sync::background_limited()),
         went_background: std::sync::atomic::AtomicBool::new(false),
         retry_on_return: std::sync::atomic::AtomicBool::new(false),
     })

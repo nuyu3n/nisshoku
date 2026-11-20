@@ -3,5 +3,5 @@ resolver = "3"
 members = ["crates/nisshoku-core", "crates/nisshoku-sync", "crates/nisshoku-engine", "crates/nisshoku-mobile", "apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"

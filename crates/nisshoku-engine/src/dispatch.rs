@@ -177,6 +177,8 @@ commands! {
     async_app sync::set_master_password(password: String),
     async_app sync::set_encryption(enabled: bool, password: Option<String>),
     async_app sync::sync_now(),
+    async_app sync::sync_unattended(),
+    state sync::has_unsent_changes(),
     app_state sync::set_foreground(visible: bool),
     state sync::profile_dir(),
     state tasks::create_task(title: String, parent_id: Option<String>, due: Option<i64>, all_day: Option<bool>),

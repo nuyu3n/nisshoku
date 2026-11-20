@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.util.Log
 import app.nisshoku.android.Notifications
+import app.nisshoku.android.engine.Api
 import app.nisshoku.android.engine.Nisshoku
 import app.nisshoku.android.engine.SyncProgress
 import app.nisshoku.android.engine.SyncStatus
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 
 /**
@@ -65,7 +67,14 @@ class SyncService : Service() {
             delay(10 * 60_000L)
             finish()
         }
-        Nisshoku.events.collect { event ->
+        // A short sync may be over before this listens: ask once it does.
+        Nisshoku.events.onSubscription {
+            val state = runCatching { Api.syncSettings().status.state }.getOrNull()
+            if (state != "syncing") {
+                stale.cancel()
+                finish()
+            }
+        }.collect { event ->
             when (event.name) {
                 "sync-progress" -> {
                     val p = runCatching { Nisshoku.json.decodeFromString<SyncProgress>(event.payload) }.getOrNull() ?: return@collect

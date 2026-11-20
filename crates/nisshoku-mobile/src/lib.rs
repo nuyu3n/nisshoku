@@ -108,7 +108,13 @@ impl Engine {
         } else {
             serde_json::from_str(&args).map_err(|e| e.to_string())?
         };
-        let reply = match nisshoku_engine::call(&self.app, &cmd, args) {
+        // (Commands that start background work, like `set_foreground`, spawn
+        // it on the engine's runtime: this thread is the app's, not Tokio's.)
+        let call = {
+            let _runtime = self.runtime.enter();
+            nisshoku_engine::call(&self.app, &cmd, args)
+        };
+        let reply = match call {
             Call::Done(r) => r,
             Call::Later(f) => self.runtime.spawn(f).await.map_err(|e| e.to_string())?,
         };
@@ -123,6 +129,7 @@ impl Engine {
         } else {
             serde_json::from_str(&args).map_err(|e| e.to_string())?
         };
+        let _runtime = self.runtime.enter();
         match nisshoku_engine::call(&self.app, &cmd, args) {
             Call::Done(r) => Ok(r?.to_string()),
             Call::Later(_) => Err(format!("{cmd} has to be awaited").into()),
@@ -138,13 +145,6 @@ impl Engine {
     pub fn commands(&self) -> Vec<String> {
         nisshoku_engine::COMMANDS.iter().map(|c| c.to_string()).collect()
     }
-}
-
-/// The background sync of WorkManager (the app closed): syncs the profile
-/// in `dir` on its own. 0 synced, 1 failed (retry later), 2 nothing to do.
-#[uniffi::export]
-pub fn background_sync(dir: String) -> i32 {
-    nisshoku_engine::sync::background_sync(std::path::Path::new(&dir))
 }
 
 #[cfg(target_os = "android")]

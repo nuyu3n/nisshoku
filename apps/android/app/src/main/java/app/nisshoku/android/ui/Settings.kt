@@ -214,7 +214,7 @@ fun SettingsScreen(model: AppModel, snackbar: SnackbarHostState, onBack: () -> U
                         "syncing" -> tr("同期しています…", "Syncing…")
                         "error" -> status.message ?: tr("エラー", "Error")
                         else -> if (status.lastSync > 0) tr("最終同期 ", "Last synced ") +
-                            DateUtils.getRelativeTimeSpanString(status.lastSync, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS) else tr("まだ同期していません", "Not synced yet")
+                            relativeTime(status.lastSync) else tr("まだ同期していません", "Not synced yet")
                     }
                     SettingRow(
                         title = tr("今すぐ同期", "Sync now"),

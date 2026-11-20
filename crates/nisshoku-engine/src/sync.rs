@@ -30,7 +30,14 @@ const LAST_SYNC_SETTING: &str = "app.sync.lastSync";
 pub async fn background(app: App) {
     let prefs = |app: &App| crate::notes::preferences(&app.state().db());
     tokio::time::sleep(Duration::from_secs(3)).await;
-    if prefs(&app).get("syncOnStart").and_then(|v| v.as_bool()) != Some(false) {
+    // (On phones, coming to the front may have synced just now: see `set_foreground`.)
+    let recent = app
+        .state()
+        .status
+        .lock()
+        .map(|s| nisshoku_core::time::now_ms() - s.last_sync < 30_000)
+        .unwrap_or(false);
+    if !recent && prefs(&app).get("syncOnStart").and_then(|v| v.as_bool()) != Some(false) {
         run_sync(&app).await;
     }
     let mut last = std::time::Instant::now();
@@ -744,48 +751,6 @@ pub async fn sync_profile(state: &AppState, progress: Option<ProgressHook>) -> R
     Ok(report)
 }
 
-/// A sync with no window (Android's background sync, `android.rs`): the
-/// profile in `dir`, opened on its own. 0 synced, 1 failed, 2 nothing to do.
-#[allow(dead_code)]
-pub fn background_sync(dir: &std::path::Path) -> i32 {
-    let Some(_slot) = SyncSlot::take() else { return 2 };
-    secrets::init(dir);
-    let state = match crate::make_state(dir) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("background sync: could not open the profile: {e}");
-            return 1;
-        }
-    };
-    if target(&state.db()) == TargetConfig::None {
-        return 2;
-    }
-    let hook = progress_hook(state.data_dir.clone(), |_| {});
-    let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("background sync: no runtime: {e}");
-            return 1;
-        }
-    };
-    let result = runtime.block_on(sync_profile(&state, Some(hook)));
-    write_progress(&state.data_dir, &SyncProgress::new(None, 0, 0));
-    if let Err(e) = crate::widgets::write(&state.data_dir, &state.db()) {
-        tracing::warn!("background sync: could not update the widgets: {e}");
-    }
-    match result {
-        Ok(report) => {
-            // The window, if it opens, shows the new state.
-            let _ = state.db().set_setting("app.sync.backgroundChanged", if report.is_noop() { "0" } else { "1" });
-            0
-        }
-        Err((message, _)) => {
-            tracing::warn!("background sync failed: {message}");
-            1
-        }
-    }
-}
-
 /// The folder of the profile (for the Android background sync, which opens it on its own).
 pub fn profile_dir(state: &AppState) -> String {
     state.data_dir.to_string_lossy().into_owned()
@@ -899,6 +864,17 @@ fn describe(e: SyncError) -> String {
     }
 }
 
+/// Whether something written here waits to be sent (Android: leaving the
+/// app with such changes asks WorkManager for a sync).
+pub fn has_unsent_changes(state: &AppState) -> CmdResult<bool> {
+    let db = state.db();
+    if target(&db) == TargetConfig::None {
+        return Ok(false);
+    }
+    let id = target_id(&db);
+    Ok(!db.deleted_items(id).map_err(err)?.is_empty() || !db.items_needing_sync(id).map_err(err)?.is_empty())
+}
+
 pub async fn sync_now(app: App) -> CmdResult<SyncStatus> {
     Ok(run_sync(&app).await)
 }
@@ -907,7 +883,7 @@ pub async fn sync_now(app: App) -> CmdResult<SyncStatus> {
 /// there, or still running when the app left, fails: the Google Drive or
 /// OneDrive token cannot be refreshed, requests are cut). Syncs wait for the
 /// front, and errors from the background are not shown but retried.
-fn background_limited() -> bool {
+pub(crate) fn background_limited() -> bool {
     cfg!(target_os = "android")
 }
 
@@ -938,26 +914,48 @@ pub fn set_foreground(app: App, state: &AppState, visible: bool) {
 
 /// Runs a sync unless one is running, publishing the status as it goes.
 pub async fn run_sync(app: &App) -> SyncStatus {
+    run(app, false).await.0
+}
+
+/// A sync for Android's WorkManager (`SyncWorker.kt`): run although the app
+/// is not in front (the job is given the network), through the profile the
+/// app has open, so that its screens hear of what changed. Waits for a sync
+/// already running (it may have started before the last edits were saved).
+/// 0 synced, 1 failed (retry later), 2 nothing to do.
+pub async fn sync_unattended(app: App) -> CmdResult<i32> {
+    Ok(run(&app, true).await.1)
+}
+
+async fn run(app: &App, unattended: bool) -> (SyncStatus, i32) {
     let state = app.state();
-    let Ok(_guard) = state.sync_lock.try_lock() else {
-        return state.status.lock().unwrap().clone();
+    let current = || state.status.lock().unwrap().clone();
+    let _guard = if unattended {
+        match tokio::time::timeout(Duration::from_secs(10 * 60), state.sync_lock.lock()).await {
+            Ok(g) => g,
+            Err(_) => return (current(), 1),
+        }
+    } else {
+        let Ok(g) = state.sync_lock.try_lock() else {
+            return (current(), 2);
+        };
+        g
     };
-    // (The background sync of Android, with the app closed, may be running.)
+    // (A sync of another `AppState` in the process may be running.)
     let Some(_slot) = SyncSlot::take() else {
-        return state.status.lock().unwrap().clone();
+        return (current(), if unattended { 1 } else { 2 });
     };
     use std::sync::atomic::Ordering::SeqCst;
-    if background_limited() && !state.foreground.load(SeqCst) {
+    if background_limited() && !unattended && !state.foreground.load(SeqCst) {
         // In the background: on return (see `set_foreground`).
         state.retry_on_return.store(true, SeqCst);
-        return state.status.lock().unwrap().clone();
+        return (current(), 2);
     }
     state.went_background.store(false, SeqCst);
-    let mut status = state.status.lock().unwrap().clone();
+    let mut status = current();
     if target(&state.db()) == TargetConfig::None {
         status = initial_status(&state.db());
         publish(app, status.clone());
-        return status;
+        return (status, 2);
     }
     status.state = "syncing".into();
     status.message = None;
@@ -975,6 +973,7 @@ pub async fn run_sync(app: &App) -> SyncStatus {
     }
     let _ = app.emit("sync-progress", SyncProgress::new(None, 0, 0));
 
+    let code = if result.is_ok() { 0 } else { 1 };
     match result {
         Ok(report) => {
             let now = nisshoku_core::time::now_ms();
@@ -999,9 +998,10 @@ pub async fn run_sync(app: &App) -> SyncStatus {
         }
         // The app left during the sync: the error is most likely the network
         // the system cut. Not shown; tried again on return.
+        // (An unattended sync is retried by WorkManager, and on return.)
         Err((message, false))
             if background_limited()
-                && (state.went_background.load(SeqCst) || !state.foreground.load(SeqCst)) =>
+                && (unattended || state.went_background.load(SeqCst) || !state.foreground.load(SeqCst)) =>
         {
             tracing::info!("sync failed in the background, retried on return: {message}");
             state.retry_on_return.store(true, SeqCst);
@@ -1021,7 +1021,7 @@ pub async fn run_sync(app: &App) -> SyncStatus {
     {
         tracing::warn!("could not update the widgets: {e}");
     }
-    status
+    (status, code)
 }
 
 #[cfg(test)]

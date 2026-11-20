@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,9 +63,13 @@ fun groupShape(index: Int, count: Int, outer: Int = 24, inner: Int = 6): Shape {
     return RoundedCornerShape(topStart = top.dp, topEnd = top.dp, bottomStart = bottom.dp, bottomEnd = bottom.dp)
 }
 
-/** "3 minutes ago", "Yesterday", a date… */
-fun relativeTime(ms: Long): String =
-    if (ms <= 0) "" else DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
+/** "Just now", "3 minutes ago", "Yesterday", a date… */
+fun relativeTime(ms: Long): String = when {
+    ms <= 0 -> ""
+    // (Not "0 min. ago"; nor "in 1 min." for a clock a little ahead of ours.)
+    kotlin.math.abs(System.currentTimeMillis() - ms) < 60_000 -> trNow("たった今", "Just now")
+    else -> DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
+}
 
 /** When a task is due: "Today", "Tomorrow 14:30", else the date. */
 fun dueText(ms: Long, allDay: Boolean): String {
@@ -97,8 +102,11 @@ fun NoteCard(
     onLongClick: () -> Unit,
     onToggleDone: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** Words searched for, marked where they appear. */
+    highlight: String? = null,
 ) {
     val haptics = LocalHapticFeedback.current
+    val mark = SpanStyle(background = MaterialTheme.colorScheme.primaryContainer, color = MaterialTheme.colorScheme.onPrimaryContainer)
     val look = LocalListLook.current
     val pad = if (look.compact) 9.dp else 14.dp
     Surface(
@@ -137,7 +145,7 @@ fun NoteCard(
                         Spacer(Modifier.width(6.dp))
                     }
                     Text(
-                        note.title.ifBlank { tr("無題", "Untitled") },
+                        highlighted(note.title.ifBlank { tr("無題", "Untitled") }, highlight, mark),
                         style = MaterialTheme.typography.titleMedium.noteTitle(),
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -154,7 +162,7 @@ fun NoteCard(
                 if (note.excerpt.isNotBlank() && look.excerpt) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        note.excerpt,
+                        highlighted(note.excerpt, highlight, mark),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = if (look.compact) 1 else 2,
@@ -169,7 +177,11 @@ fun NoteCard(
                         Text(
                             due,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            color = when {
+                                note.todoCompleted -> MaterialTheme.colorScheme.outline
+                                late -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.primary
+                            },
                         )
                     }
                     Text(
@@ -197,6 +209,20 @@ fun NoteCard(
         }
     }
 }
+
+/** `text` with each word of `query` marked (ignoring case). */
+fun highlighted(text: String, query: String?, style: SpanStyle): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        append(text)
+        val words = query?.split(' ', '　')?.filter { it.isNotEmpty() && !it.contains(':') } ?: return@buildAnnotatedString
+        for (word in words) {
+            var at = text.indexOf(word, ignoreCase = true)
+            while (at >= 0) {
+                addStyle(style, at, at + word.length)
+                at = text.indexOf(word, at + word.length, ignoreCase = true)
+            }
+        }
+    }
 
 /** A notebook's mark: its emoji, or a dot in its colour. */
 @Composable

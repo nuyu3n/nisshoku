@@ -20,7 +20,7 @@ import app.nisshoku.android.engine.Api
  * on its board (Works.kt).
  */
 @Composable
-fun NoteScreen(noteId: String, dark: Boolean, model: AppModel, onClose: () -> Unit) {
+fun NoteScreen(noteId: String, dark: Boolean, model: AppModel, onClose: () -> Unit, find: String? = null) {
     // The note shown (the diary moves to other days, a conflict to the note kept).
     var current by rememberSaveable(noteId) { mutableStateOf(noteId) }
     var mode by rememberSaveable(noteId) { mutableStateOf<String?>(null) }
@@ -36,7 +36,7 @@ fun NoteScreen(noteId: String, dark: Boolean, model: AppModel, onClose: () -> Un
     AnimatedContent(mode, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "editor") { shown ->
         when (shown) {
             "native" -> androidx.compose.runtime.key(current) {
-                NativeEditorScreen(noteId = current, model = model, onClose = onClose, onOther = { current = it })
+                NativeEditorScreen(noteId = current, model = model, onClose = onClose, onOther = { current = it }, find = find.takeIf { current == noteId })
             }
             "plot" -> PlotScreen(current, model, onClose)
             else -> Box(Modifier.fillMaxSize())

@@ -34,9 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,6 +53,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 
+private const val NOTE_ROUTE = "note/{id}?find={find}"
+
 class MainActivity : ComponentActivity() {
     private val model: AppModel by viewModels()
 
@@ -67,11 +66,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         splash.setKeepOnScreenCondition { !model.home.value.ready }
         pendingLink.value = linkOf(intent)
-
-        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = model.setForeground(true)
-            override fun onStop(owner: LifecycleOwner) = model.setForeground(false)
-        })
 
         setContent {
             val prefs by model.prefs.collectAsState()
@@ -181,20 +175,24 @@ class MainActivity : ComponentActivity() {
                 )
             }
             composable(
-                "note/{id}",
+                NOTE_ROUTE,
+                // Words to show the note at (opened from a search).
+                arguments = listOf(androidx.navigation.navArgument("find") { nullable = true; defaultValue = null }),
                 enterTransition = { scaleIn(tween(320), initialScale = 0.94f) + fadeIn(tween(240)) },
             ) { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
-                NoteScreen(noteId = id, dark = dark, model = model, onClose = {
+                NoteScreen(noteId = id, dark = dark, model = model, find = entry.arguments?.getString("find"), onClose = {
                     model.editorClosed()
-                    if (nav.currentBackStackEntry?.destination?.route == "note/{id}") nav.popBackStack()
+                    if (nav.currentBackStackEntry?.destination?.route == NOTE_ROUTE) nav.popBackStack()
                 })
             }
             composable("work/{id}") { entry ->
                 app.nisshoku.android.ui.WorkScreen(entry.arguments?.getString("id").orEmpty(), model, onOpen = open, onBack = { nav.popBackStack() })
             }
             composable("search") {
-                SearchScreen(onBack = { nav.popBackStack() }, onOpen = open)
+                SearchScreen(onBack = { nav.popBackStack() }, onOpen = { id, query ->
+                    nav.navigate("note/$id?find=${Uri.encode(query)}") { launchSingleTop = true }
+                })
             }
             composable("settings") {
                 SettingsScreen(model = model, snackbar = snackbar, onBack = { nav.popBackStack() }, onSyncSetup = { nav.navigate("sync?kind=$it") }, onStats = { nav.navigate("stats") })

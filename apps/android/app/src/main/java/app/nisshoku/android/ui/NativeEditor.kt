@@ -8,9 +8,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -87,6 +90,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.SpanStyle
@@ -107,6 +112,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import app.nisshoku.android.engine.Api
 import app.nisshoku.android.engine.Nisshoku
 import app.nisshoku.android.tr
+import app.nisshoku.android.trNow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -368,7 +374,7 @@ private const val LINE_BREAK = '\n'
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onOther: (String) -> Unit = {}) {
+fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onOther: (String) -> Unit = {}, find: String? = null) {
     var noteKind by remember { mutableStateOf<String?>(null) }
     var parentId by remember { mutableStateOf("") }
     var conflict by remember { mutableStateOf(false) }
@@ -411,9 +417,13 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
             if (t == session.title && b == session.body) return
             saving = true
             try {
-                Api.saveNote(noteId, t, b, session.title, session.body)
+                val saved = Api.saveNote(noteId, t, b, session.title, session.body)
                 session.title = t
                 session.body = b
+                // Changed on another device meanwhile: that version is kept as a copy.
+                if (saved.conflictId != null) {
+                    model.say(trNow("ほかの端末での変更と重なったため、そちらを競合コピーとして残しました", "This note was also changed on another device; that version was kept as a conflict copy"))
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 model.say(e.message ?: "")
@@ -423,10 +433,16 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
         }
     }
 
-    /** Takes what the engine has now (after a sync), unless it is what is shown. */
+    /**
+     * Takes what the engine has now (after a sync), unless it is what is
+     * shown. Not over what was typed and not saved yet (the next save
+     * merges it): that would be lost.
+     */
     suspend fun reload() {
-        val note = runCatching { Api.note(noteId) }.getOrNull() ?: return
         session.lock.withLock {
+            val note = runCatching { Api.note(noteId) }.getOrNull() ?: return
+            // (Checked after the engine answered: typing goes on meanwhile.)
+            if (title.text.toString() != session.title || body.text.toString() != session.body) return
             if (note.body != body.text.toString()) {
                 body.edit {
                     val cursor = selection.start
@@ -535,19 +551,71 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
             then()
         }
     }
-    BackHandler { leave { close() } }
+    /**
+     * Back to the list. A note opened empty and left empty (+ tapped by
+     * mistake, or nothing to write after all) goes: an "Untitled" left
+     * behind would only clutter the list, and every synced device.
+     */
+    fun closeNote() {
+        keyboard?.hide()
+        scope.launch {
+            save()
+            val empty = loaded && startAtTitle && diaryDate == null && noteKind == null &&
+                title.text.isBlank() && body.text.isBlank()
+            if (empty && runCatching { Api.deleteForever(noteId) }.isSuccess) {
+                model.say(trNow("空のノートは保存しませんでした", "The empty note was not kept"))
+            }
+            close()
+        }
+    }
+    BackHandler { closeNote() }
 
     val scheme = MaterialTheme.colorScheme
     val colors = remember(scheme) {
         MarkdownColors(dim = scheme.outline, accent = scheme.primary, quote = scheme.onSurfaceVariant, codeBackground = scheme.surfaceContainerHigh)
     }
-    val markdown = remember(colors) { OutputTransformation { styleMarkdown(colors) } }
+    var layout by remember { mutableStateOf<(() -> TextLayoutResult?)?>(null) }
+    /** Words found by a search, marked for a moment once the note opens at them. */
+    var flash by remember { mutableStateOf<IntRange?>(null) }
+    val flashStyle = SpanStyle(background = scheme.primaryContainer, color = scheme.onPrimaryContainer)
+    val markdown = remember(colors) {
+        OutputTransformation {
+            styleMarkdown(colors)
+            flash?.let { r -> if (r.last < length) addStyle(flashStyle, r.first, r.last + 1) }
+        }
+    }
+    val pageScroll = rememberScrollState()
+    /** Where the text starts on the page (under the title and the bars above it). */
+    var bodyTop by remember { mutableStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // Opened from a search: at the first word found, marked.
+    LaunchedEffect(loaded) {
+        if (!loaded || find.isNullOrBlank()) return@LaunchedEffect
+        val text = body.text.toString()
+        val (at, length) = find.split(' ', '　').filter { it.isNotBlank() && ':' !in it }
+            .map { text.indexOf(it, ignoreCase = true) to it.length }
+            .filter { it.first >= 0 }
+            .minByOrNull { it.first } ?: return@LaunchedEffect
+        body.edit { selection = TextRange(at) }
+        flash = at until at + length
+        var result: TextLayoutResult? = null
+        for (i in 0 until 40) {
+            result = layout?.invoke()?.takeIf { it.layoutInput.text.length >= at + length }
+            if (result != null) break
+            delay(25)
+        }
+        result?.let {
+            val y = bodyTop + it.getBoundingBox(at).top - with(density) { 120.dp.toPx() }
+            pageScroll.animateScrollTo(y.toInt().coerceAtLeast(0))
+        }
+        delay(2500)
+        flash = null
+    }
     val family = if ((prefs["editorFont"] as? JsonPrimitive)?.content == "sans") FontFamily.SansSerif else FontFamily.Serif
     val size = model.prefInt("fontSize", 17).coerceIn(12, 30)
     val lineHeight = ((prefs["lineHeight"] as? JsonPrimitive)?.content?.toFloatOrNull() ?: 1.95f).coerceIn(1.2f, 2.6f)
     val bodyStyle = TextStyle(fontFamily = family, fontSize = size.sp, lineHeight = (size * lineHeight * 0.92f).sp, color = scheme.onSurface)
 
-    var layout by remember { mutableStateOf<(() -> TextLayoutResult?)?>(null) }
     val bodyFocus = remember { FocusRequester() }
     // The title is one paragraph: Enter goes on to the text (pasted line breaks become spaces).
     var toBody by remember { mutableStateOf(0) }
@@ -579,7 +647,7 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
                 )
             },
             navigationIcon = {
-                IconButton(onClick = { leave { close() } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, tr("戻る", "Back")) }
+                IconButton(onClick = { closeNote() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, tr("戻る", "Back")) }
             },
             actions = {
                 if (loaded) IconButton(onClick = { keyboard?.hide(); tool = "preview" }) {
@@ -645,11 +713,12 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
                 }
             },
         )
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val page = maxHeight
             if (!loaded) {
                 LoadingIndicator(Modifier.align(Alignment.Center))
             } else {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+                Column(Modifier.fillMaxSize().verticalScroll(pageScroll).padding(horizontal = 20.dp)) {
                     if (conflict) {
                         ConflictBanner(
                             onKeepCopy = { scope.launch { save(); model.resolveConflict(noteId, "copy")?.let { onOther(it) } ?: close() } },
@@ -704,7 +773,10 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 320.dp)
+                            // (Down to the bottom of the screen: a tap on the empty
+                            // page below the text writes at its end.)
+                            .heightIn(min = maxOf(320.dp, page - 140.dp))
+                            .onGloballyPositioned { bodyTop = it.positionInParent().y }
                             .focusRequester(bodyFocus)
                             // A tap on a check box ticks it (and is not a tap into the text).
                             .pointerInput(readOnly) {
@@ -725,7 +797,17 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
                                 }
                             },
                     )
-                    Spacer(Modifier.height(160.dp))
+                    // The margin under a long text: a tap there writes at its end too.
+                    Box(
+                        Modifier.fillMaxWidth().height(160.dp).pointerInput(readOnly) {
+                            if (readOnly) return@pointerInput
+                            detectTapGestures {
+                                body.edit { selection = TextRange(length) }
+                                runCatching { bodyFocus.requestFocus() }
+                                keyboard?.show()
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -769,13 +851,16 @@ fun NativeEditorScreen(noteId: String, model: AppModel, onClose: () -> Unit, onO
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit, onImage: () -> Unit) {
     val haptics = LocalHapticFeedback.current
+    // The keyboard's own button stays in sight at the right (the others scroll).
+    val keyboardUp = WindowInsets.isImeVisible
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+      Row(Modifier.navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.navigationBarsPadding().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             @Composable
@@ -799,8 +884,18 @@ private fun FormatBar(body: TextFieldState, onHideKeyboard: () -> Unit, onImage:
             button(Icons.Outlined.FormatItalic, tr("斜体", "Italic")) { body.wrap("*") }
             button(Icons.Outlined.FormatQuote, tr("引用", "Quote")) { body.toggleLinePrefix("> ") }
             button(Icons.Outlined.Image, tr("画像を挿入", "Insert a picture")) { onImage() }
-            button(Icons.Outlined.KeyboardHide, tr("キーボードを閉じる", "Hide the keyboard")) { onHideKeyboard() }
         }
+        if (keyboardUp) {
+            androidx.compose.material3.VerticalDivider(Modifier.height(28.dp))
+            IconButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onHideKeyboard()
+                },
+                modifier = Modifier.size(52.dp),
+            ) { Icon(Icons.Outlined.KeyboardHide, tr("キーボードを閉じる", "Hide the keyboard")) }
+        }
+      }
     }
 }
 

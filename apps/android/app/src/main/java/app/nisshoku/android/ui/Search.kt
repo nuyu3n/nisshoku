@@ -57,15 +57,19 @@ import kotlinx.coroutines.delay
 /** Full-text search over all notes, as you type. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun SearchScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
+fun SearchScreen(onBack: () -> Unit, onOpen: (id: String, query: String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<NoteSummary>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
+    // Straight into typing, with the keyboard up (not again when coming
+    // back from a result, to look through the others).
+    var started by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        // Straight into typing, with the keyboard up.
+        if (started && query.isNotBlank()) return@LaunchedEffect
+        started = true
         focus.requestFocus()
         keyboard?.show()
     }
@@ -126,11 +130,12 @@ fun SearchScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         shape = groupShape(i, results.size),
                         onClick = {
                             keyboard?.hide()
-                            onOpen(note.id)
+                            onOpen(note.id, query.trim())
                         },
                         onLongClick = {},
                         onToggleDone = null,
                         modifier = Modifier.animateItem(),
+                        highlight = query.trim(),
                     )
                 }
             }

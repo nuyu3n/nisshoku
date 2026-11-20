@@ -471,6 +471,10 @@ pub fn list_notes(state: &AppState, scope: NoteScope) -> CmdResult<Vec<NoteSumma
         .map(|n| {
             let mut s = summary(n);
             s.tags = tags.get(&n.id).cloned().unwrap_or_default();
+            // A search shows where the words were found.
+            if let NoteScope::Search { query } = &scope {
+                s.excerpt = crate::text::search_excerpt(&n.title, &n.body, query, 90);
+            }
             s
         })
         .collect();
